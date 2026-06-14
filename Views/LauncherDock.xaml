@@ -41,6 +41,7 @@
             Padding="6"
             AllowDrop="True" DragOver="Surface_DragOver" Drop="Surface_Drop">
         <Grid>
+        <StackPanel Orientation="Horizontal">
         <ItemsControl x:Name="AppList">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -83,6 +84,16 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
+
+        <!-- [+] 앱 추가(설정 열기) — FM의 + 버튼 재현 -->
+        <Button x:Name="AddButton" Style="{StaticResource IconButton}"
+                Click="AddButton_Click" ToolTip="앱 추가" VerticalAlignment="Stretch">
+            <Grid Width="24" Height="29">
+                <TextBlock Text="+" Foreground="White" FontSize="22" FontFamily="Segoe UI"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
+            </Grid>
+        </Button>
+        </StackPanel>
 
         <!-- 고정구간 구분선(FM sepLine) — 코드비하인드에서 위치/표시 갱신 -->
         <Rectangle x:Name="SepLine" Width="2" Fill="#FF555555"

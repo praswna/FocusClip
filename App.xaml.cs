@@ -33,6 +33,7 @@ public partial class App : Application
     private Sidebar? _sidebar;
     private SettingsWindow? _settings;
     private ClipboardPopup? _clipPopup;
+    private PathPopup? _pathPopup;
     private Toast? _toast;
     private DispatcherTimer? _refreshTimer;
     private DispatcherTimer? _outsidePoll;   // 오토클로즈: 외부 클릭 감지
@@ -106,12 +107,18 @@ public partial class App : Application
         _dock.AppRightClicked += OnAppRightClicked;
         _dock.AppsReordered += OnAppsChanged;
         _dock.AppRemoveRequested += app => { _apps.Remove(app); OnAppsChanged(); };
+        // 드래그가 구분선을 넘으면 고정 개수 갱신(저장은 뒤따르는 AppsReordered→OnAppsChanged가 처리).
+        _dock.PinnedCountChanged += n => _configSvc.Config.PinnedCount = n;
+        _dock.AddRequested += () => Dispatcher.BeginInvoke(OpenSettings); // [+] → 설정 열기
         _dock.SetPinnedCount(_configSvc.Config.PinnedCount);
     }
 
     /// <summary>F1: 도크 순서 변경/제거 후 config 저장 + 사이드바 갱신.</summary>
     private void OnAppsChanged()
     {
+        // 앱 제거로 고정 개수가 앱 수를 초과하면 클램프.
+        if (_configSvc.Config.PinnedCount > _apps.Count)
+            _configSvc.Config.PinnedCount = Math.Max(1, _apps.Count);
         _configSvc.Config.Apps = _apps.ToList();
         _configSvc.Save();
         RebuildSidebar();
@@ -140,11 +147,16 @@ public partial class App : Application
         _clipPopup.ClipDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
         _clipPopup.ClipPinToggled += item => Dispatcher.BeginInvoke(() => _clipboard.TogglePin(item));
         _clipPopup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
+
+        _pathPopup = new PathPopup();
+        _pathPopup.SetItems(_clipboard.Paths);
+        _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item)); // 전체 경로 붙여넣기
+        _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
     }
 
     private void SetupHotkey()
     {
-        _hotkey = new HotkeyService { HotkeyVk = _configSvc.Config.HotkeyVk };
+        _hotkey = new HotkeyService { HotkeyVk = _configSvc.Config.HotkeyVk, MaxNumber = _configSvc.Config.PinnedCount };
         _hotkey.HotkeyPressed += () => Dispatcher.BeginInvoke(ToggleOverlay);
         _hotkey.NumberPressed += n => Dispatcher.BeginInvoke(() => ActivatePinned(n));
         _hotkey.EscapePressed += () => Dispatcher.BeginInvoke(() => HideOverlay(force: true));
@@ -175,7 +187,7 @@ public partial class App : Application
     // ── 오버레이(도크 + 클립 팝업) 토글 ──
     private void ToggleOverlay()
     {
-        if ((_dock?.IsVisible ?? false) || (_clipPopup?.IsVisible ?? false)) HideOverlay(force: true);
+        if ((_dock?.IsVisible ?? false) || (_clipPopup?.IsVisible ?? false) || (_pathPopup?.IsVisible ?? false)) HideOverlay(force: true);
         else ShowOverlay();
     }
 
@@ -185,6 +197,7 @@ public partial class App : Application
         RefreshActiveStates();
         _dock!.ShowAtCursor();
         if (_clipboard.Items.Count > 0) _clipPopup!.ShowAbove(_dock); // 클립이 있을 때만 도크 위에
+        if (_clipboard.Paths.Count > 0) _pathPopup!.ShowBelow(_dock); // 경로가 있을 때만 도크 아래에
         _hotkey!.CaptureExtraKeys = true;
         _overlayShownAt = DateTime.Now;
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
@@ -195,6 +208,7 @@ public partial class App : Application
     {
         _dock?.Hide();
         if (force || !(_clipPopup?.Pinned ?? false)) _clipPopup?.Hide();
+        _pathPopup?.Hide();
         if (_hotkey != null) _hotkey.CaptureExtraKeys = false;
         _outsidePoll?.Stop();
     }
@@ -206,8 +220,9 @@ public partial class App : Application
         {
             bool dockVisible = _dock?.IsVisible ?? false;
             bool popupVisible = _clipPopup?.IsVisible ?? false;
+            bool pathVisible = _pathPopup?.IsVisible ?? false;
             bool pinned = _clipPopup?.Pinned ?? false;
-            if (!dockVisible && (!popupVisible || pinned)) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
+            if (!dockVisible && (!popupVisible || pinned) && !pathVisible) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
             if ((DateTime.Now - _overlayShownAt).TotalMilliseconds < 200) return;            // 표시 직후 유예
 
             bool clicked = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0
@@ -216,7 +231,8 @@ public partial class App : Application
 
             bool outsideDock = !dockVisible || _dock == null || CursorOutside(_dock);
             bool outsidePopup = !popupVisible || _clipPopup == null || CursorOutside(_clipPopup);
-            if (outsideDock && outsidePopup) HideOverlay(force: false);
+            bool outsidePath = !pathVisible || _pathPopup == null || CursorOutside(_pathPopup);
+            if (outsideDock && outsidePopup && outsidePath) HideOverlay(force: false);
         }
         catch { /* 30ms 타이머는 절대 앱을 죽이지 않게 */ }
     }
@@ -353,6 +369,8 @@ public partial class App : Application
 
     private void RebuildSidebar()
     {
+        // 후크 숫자키 상한을 고정 개수에 동기화(설정 변경·드래그 양쪽에서 호출되는 단일 지점).
+        if (_hotkey != null) _hotkey.MaxNumber = _configSvc.Config.PinnedCount;
         if (_sidebar is null) return;
         int n = Math.Min(_configSvc.Config.PinnedCount, _apps.Count);
         _sidebar.SetApps(_apps.Take(n).ToList());

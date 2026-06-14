@@ -11,6 +11,9 @@ public class ClipItem : INotifyPropertyChanged
 {
     public bool IsImage { get; set; }
 
+    /// <summary>파일 경로 항목 여부(경로 전용 팝업에서 관리). Text=전체 경로.</summary>
+    public bool IsPath { get; set; }
+
     private string _text = "";
     public string Text                                  // 텍스트 내용(이미지면 빈 문자열)
     {
@@ -45,6 +48,34 @@ public class ClipItem : INotifyPropertyChanged
 
     public string TimeLabel => Time.ToString("HH:mm:ss");
     public string Snippet => IsImage ? "" : (Text.Length > 300 ? Text[..300] : Text);
+
+    // ── 경로 항목 함축 표시 ──
+    /// <summary>경로의 마지막 세그먼트(파일/폴더명) — 카드 주 텍스트.</summary>
+    public string PathName
+    {
+        get
+        {
+            string t = Text.Trim().TrimEnd('\\', '/');
+            if (t.Length == 0) return Text;
+            string name = System.IO.Path.GetFileName(t);
+            return string.IsNullOrEmpty(name) ? t : name; // 루트(C:\) 등은 원문
+        }
+    }
+
+    /// <summary>부모 경로를 중간 생략한 보조 텍스트(예: C:\…\상위폴더).</summary>
+    public string PathDir
+    {
+        get
+        {
+            string t = Text.Trim().TrimEnd('\\', '/');
+            string? dir = null;
+            try { dir = System.IO.Path.GetDirectoryName(t); } catch { }
+            if (string.IsNullOrEmpty(dir)) return "";
+            var parts = dir.Split('\\', '/');
+            if (parts.Length <= 2) return dir;                 // 짧으면 그대로
+            return $"{parts[0]}\\…\\{parts[^1]}";              // 루트…\상위폴더
+        }
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? n = null)

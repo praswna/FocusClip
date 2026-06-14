@@ -18,6 +18,9 @@ public sealed class HotkeyService : IDisposable
 
     public int HotkeyVk { get; set; } = NativeMethods.VK_CAPITAL;
 
+    /// <summary>가로채 소비할 숫자키 상한(1~N). 고정 구간 개수에 연동. 최대 9.</summary>
+    public int MaxNumber { get; set; } = 4;
+
     /// <summary>도크가 떠 있을 때 true → 숫자키/Esc 를 가로채 소비한다.</summary>
     public bool CaptureExtraKeys { get; set; }
 
@@ -57,7 +60,8 @@ public sealed class HotkeyService : IDisposable
             else if (CaptureExtraKeys && down)
             {
                 uint vk = data.vkCode;
-                if (vk >= 0x31 && vk <= 0x34) // 1~4
+                uint hi = (uint)(0x30 + Math.Clamp(MaxNumber, 0, 9));
+                if (vk >= 0x31 && vk <= hi) // 1~MaxNumber (최대 9)
                 {
                     int n = (int)(vk - 0x30);
                     try { NumberPressed?.Invoke(n); } catch { }

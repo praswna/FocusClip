@@ -26,6 +26,9 @@ public sealed class ClipboardService : IDisposable
 
     public ObservableCollection<ClipItem> Items { get; } = new();
 
+    /// <summary>복사된 파일 경로 항목(경로 전용 팝업에서 관리). 메인 Items와 분리.</summary>
+    public ObservableCollection<ClipItem> Paths { get; } = new();
+
     /// <summary>새 클립이 추가될 때 발생(토스트 알림용).</summary>
     public event Action<ClipItem>? ItemAdded;
 
@@ -74,27 +77,55 @@ public sealed class ClipboardService : IDisposable
                 var img = Clipboard.GetImage();
                 if (img != null) { AddImage(img); return; }
             }
+            // 탐색기에서 복사한 파일/폴더(드롭 목록) → 경로 항목으로.
+            if (Clipboard.ContainsFileDropList())
+            {
+                var files = Clipboard.GetFileDropList();
+                if (files.Count > 0)
+                {
+                    foreach (string? f in files)
+                        if (!string.IsNullOrWhiteSpace(f)) AddPath(f);
+                    return;
+                }
+            }
             if (Clipboard.ContainsText())
             {
                 string t = Clipboard.GetText();
-                if (!string.IsNullOrWhiteSpace(t)) AddText(t);
+                if (string.IsNullOrWhiteSpace(t)) return;
+                if (IsPathLike(t)) AddPath(t.Trim());   // 경로 패턴 텍스트는 경로 팝업으로
+                else AddText(t);
             }
         }
         catch { /* 다른 앱이 클립보드를 잠금 → 다음 이벤트에서 재시도 */ }
     }
 
+    /// <summary>단일 줄의 드라이브/UNC 경로 패턴인지(존재 여부는 따지지 않음).</summary>
+    private static bool IsPathLike(string t)
+    {
+        t = t.Trim();
+        if (t.Length < 3 || t.Contains('\n')) return false; // 단일 줄만
+        return System.Text.RegularExpressions.Regex.IsMatch(t, @"^[A-Za-z]:\\") || t.StartsWith(@"\\");
+    }
+
+    private void AddPath(string path)
+    {
+        string hash = "path:" + Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(path)));
+        if (Dedup(Paths, hash)) return;
+        Insert(Paths, new ClipItem { IsPath = true, Text = path, Hash = hash });
+    }
+
     private void AddText(string text)
     {
         string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
-        if (Dedup(hash)) return;
-        Insert(new ClipItem { IsImage = false, Text = text, Hash = hash });
+        if (Dedup(Items, hash)) return;
+        Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash });
     }
 
     private void AddImage(BitmapSource img)
     {
         if (!img.IsFrozen && img.CanFreeze) img.Freeze();
         string hash = HashImage(img);
-        if (Dedup(hash)) return;
+        if (Dedup(Items, hash)) return;
 
         // C7: 원본은 메모리에 즉시 보관(붙여넣기 가능) + PNG 저장은 백그라운드로.
         var item = new ClipItem
@@ -104,7 +135,7 @@ public sealed class ClipboardService : IDisposable
             Thumb = MakeThumb(img),
             FullImage = img,
         };
-        Insert(item);
+        Insert(Items, item);
         SaveImageAsync(item, img);
     }
 
@@ -124,39 +155,39 @@ public sealed class ClipboardService : IDisposable
     }
 
     /// <summary>같은 해시가 있으면 핀 구간 바로 아래(최상단 비핀 위치)로 이동하고 true 반환.</summary>
-    private bool Dedup(string hash)
+    private static bool Dedup(ObservableCollection<ClipItem> col, string hash)
     {
-        var existing = Items.FirstOrDefault(c => c.Hash == hash);
+        var existing = col.FirstOrDefault(c => c.Hash == hash);
         if (existing == null) return false;
         if (!existing.Pinned)
         {
-            int i = Items.IndexOf(existing);
-            int top = PinnedCountFront();
-            if (i > top) Items.Move(i, top);
+            int i = col.IndexOf(existing);
+            int top = PinnedCountFront(col);
+            if (i > top) col.Move(i, top);
         }
         return true;
     }
 
     /// <summary>맨 앞에 연속으로 핀된 항목 수(핀 구간 경계).</summary>
-    private int PinnedCountFront()
+    private static int PinnedCountFront(ObservableCollection<ClipItem> col)
     {
         int n = 0;
-        while (n < Items.Count && Items[n].Pinned) n++;
+        while (n < col.Count && col[n].Pinned) n++;
         return n;
     }
 
-    private void Insert(ClipItem item)
+    private void Insert(ObservableCollection<ClipItem> col, ClipItem item)
     {
         // 새 항목은 핀 구간 바로 아래(비핀 최상단)에 넣는다.
-        Items.Insert(PinnedCountFront(), item);
+        col.Insert(PinnedCountFront(col), item);
         // 용량 초과 시 뒤에서부터 '비핀' 항목만 제거(핀 항목은 보호).
-        while (Items.Count > MaxItems)
+        while (col.Count > MaxItems)
         {
             int idx = -1;
-            for (int i = Items.Count - 1; i >= 0; i--)
-                if (!Items[i].Pinned) { idx = i; break; }
+            for (int i = col.Count - 1; i >= 0; i--)
+                if (!col[i].Pinned) { idx = i; break; }
             if (idx < 0) break; // 전부 핀이면 제거하지 않음
-            Items.RemoveAt(idx);
+            col.RemoveAt(idx);
         }
         try { ItemAdded?.Invoke(item); } catch { }
     }
@@ -214,7 +245,7 @@ public sealed class ClipboardService : IDisposable
     public void AddEditedText(string text)
     {
         string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
-        Insert(new ClipItem { IsImage = false, Text = text, Hash = hash });
+        Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash });
         try { MarkInternalCopy(); Clipboard.SetText(text); } catch { }
     }
 
@@ -229,7 +260,7 @@ public sealed class ClipboardService : IDisposable
             Thumb = MakeThumb(img),
             FullImage = img,
         };
-        Insert(item);
+        Insert(Items, item);
         SaveImageAsync(item, img);
         try { MarkInternalCopy(); Clipboard.SetImage(img); } catch { }
     }
@@ -238,7 +269,7 @@ public sealed class ClipboardService : IDisposable
     public void Remove(ClipItem item)
     {
         item.Removed = true; // 진행 중인 비동기 저장이 끝나면 파일을 정리하도록 표식
-        Items.Remove(item);
+        if (!Items.Remove(item)) Paths.Remove(item); // 경로 항목은 Paths에 있음
         try { if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath)) File.Delete(item.FilePath); }
         catch { }
     }

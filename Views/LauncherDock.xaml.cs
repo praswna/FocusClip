@@ -20,12 +20,19 @@ public partial class LauncherDock : Window
     public event Action? AppsReordered;
     /// <summary>F1: 도크 밖으로 드롭 → 앱 제거 요청.</summary>
     public event Action<AppEntry>? AppRemoveRequested;
+    /// <summary>드래그가 구분선을 넘어 고정 개수가 바뀜 → 새 PinnedCount 전달.</summary>
+    public event Action<int>? PinnedCountChanged;
+    /// <summary>[+] 버튼 클릭 → 설정 열기 요청(FM의 + 버튼).</summary>
+    public event Action? AddRequested;
+
+    private const double SepGapPx = 8; // 구분선 좌우 여백(경계 컨테이너 좌측 여백)
 
     private ObservableCollection<AppEntry>? _apps; // 순서 변경 대상(공유 컬렉션)
     private Point _dragStart;
     private AppEntry? _dragItem;
     private bool _justDragged;
     private int _pinnedCount = 4; // 고정구간 경계(구분선 위치)
+    private FrameworkElement? _paddedContainer; // 구분선 여백을 적용한 경계 컨테이너(이동 시 리셋용)
 
     public LauncherDock()
     {
@@ -51,6 +58,10 @@ public partial class LauncherDock : Window
     private void UpdateSeparator()
     {
         if (SepLine == null || AppList?.Items == null) return;
+
+        // 이전 경계 컨테이너의 여백 리셋(경계가 이동했을 수 있음).
+        if (_paddedContainer != null) { _paddedContainer.Margin = new Thickness(0); _paddedContainer = null; }
+
         int count = AppList.Items.Count;
         if (_pinnedCount <= 0 || _pinnedCount >= count)
         {
@@ -65,9 +76,13 @@ public partial class LauncherDock : Window
         }
         try
         {
+            // 경계(첫 미고정) 컨테이너에 좌측 여백 → 틈을 벌리고 선을 그 중앙에 배치.
+            container.Margin = new Thickness(SepGapPx, 0, 0, 0);
+            _paddedContainer = container;
+
             Point p = container.TransformToAncestor(gridVisual).Transform(new Point(0, 0));
-            double x = Math.Max(0, p.X - 3); // 아이콘 사이 간격 중앙쯤
-            SepLine.Margin = new Thickness(x, 2, 0, 2);
+            double x = Math.Max(0, p.X - SepGapPx / 2 - 1); // 벌린 틈의 중앙
+            SepLine.Margin = new Thickness(x, 4, 0, 4);
             SepLine.Visibility = Visibility.Visible;
         }
         catch { SepLine.Visibility = Visibility.Collapsed; }
@@ -127,11 +142,29 @@ public partial class LauncherDock : Window
             int from = _apps.IndexOf(dragged), to = _apps.IndexOf(target);
             if (from >= 0 && to >= 0)
             {
+                // 이동 전 인덱스로 고정구간(구분선 왼쪽) 횡단 여부 판정.
+                int p = _pinnedCount;
+                bool fromPinned = from < p;
+                bool toPinned = to < p;
+
                 _apps.Move(from, to);
+
+                if (!fromPinned && toPinned)            // 미고정 → 고정: 영역 +1
+                    _pinnedCount = Math.Min(_pinnedCount + 1, Math.Min(9, _apps.Count));
+                else if (fromPinned && !toPinned)       // 고정 → 미고정: 영역 -1
+                    _pinnedCount = Math.Max(1, _pinnedCount - 1);
+
+                if (_pinnedCount != p)
+                {
+                    PinnedCountChanged?.Invoke(_pinnedCount);
+                    UpdateSeparator();
+                }
                 AppsReordered?.Invoke();
             }
         }
     }
+
+    private void AddButton_Click(object sender, RoutedEventArgs e) => AddRequested?.Invoke();
 
     // 도크 배경에 드롭 = 순서 유지(제거 방지). Move 로 처리해 None 이 되지 않게 한다.
     private void Surface_DragOver(object sender, DragEventArgs e)
