@@ -16,6 +16,7 @@ namespace FocusClip.Services;
 
 /// <summary>
 /// 클립보드 변경을 감시(WM_CLIPBOARDUPDATE)하여 텍스트/이미지를 수집한다.
+/// 파일 드롭 목록·경로/URL 텍스트는 메인 Items에서 분리해 별도 Paths 컬렉션으로 모은다.
 /// (CM의 _check_clipboard/ClipWorker 대응 — 폴링 대신 OS 리스너로 더 정확/가볍게)
 /// </summary>
 public sealed class ClipboardService : IDisposable
