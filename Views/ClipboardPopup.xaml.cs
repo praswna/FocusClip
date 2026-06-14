@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -24,12 +26,37 @@ public partial class ClipboardPopup : Window
     /// <summary>C1: 팝업 핀(자동 닫힘 해제). true면 앱 활성화/클립 선택에도 닫지 않음.</summary>
     public bool Pinned { get; private set; }
 
+    private enum ClipFilter { All, Text, Image }
+    private ClipFilter _filter = ClipFilter.All;
+    private ICollectionView? _view;
+
     public ClipboardPopup()
     {
         InitializeComponent();
     }
 
-    public void SetItems(IEnumerable<ClipItem> items) => ClipList.ItemsSource = items;
+    public void SetItems(IEnumerable<ClipItem> items)
+    {
+        _view = CollectionViewSource.GetDefaultView(items);
+        _view.Filter = o => o is ClipItem c && _filter switch
+        {
+            ClipFilter.Text => !c.IsImage,
+            ClipFilter.Image => c.IsImage,
+            _ => true,
+        };
+        ClipList.ItemsSource = _view;
+    }
+
+    // ── 텍스트/이미지 필터 토글 ──
+    private void Filter_All_Checked(object sender, RoutedEventArgs e) => ApplyFilter(ClipFilter.All);
+    private void Filter_Text_Checked(object sender, RoutedEventArgs e) => ApplyFilter(ClipFilter.Text);
+    private void Filter_Image_Checked(object sender, RoutedEventArgs e) => ApplyFilter(ClipFilter.Image);
+
+    private void ApplyFilter(ClipFilter f)
+    {
+        _filter = f;
+        _view?.Refresh();
+    }
 
     // ── 카드 드래그: 내용을 OS 드래그로 끌어내 다른 앱/탐색기에 드롭 (CM mouseMoveEvent 대응) ──
     private Point _cardDragStart;

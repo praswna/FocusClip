@@ -81,6 +81,32 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- 필터 세그먼트(전체/텍스트/이미지): 선택 시 액센트, 호버 시 Bg3 -->
+        <Style x:Key="SegBtn" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="4" Padding="6,2" Margin="0,0,3,0">
+                            <TextBlock Text="{TemplateBinding Content}" FontSize="10"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource Bg3Brush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border Background="{StaticResource BgBrush}"
@@ -94,10 +120,16 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- 헤더: 팝업 핀 토글(위치는 도크 위 고정) -->
+            <!-- 헤더: 필터 세그먼트(전체/텍스트/이미지) + 팝업 핀 토글 -->
             <Grid Grid.Row="0" Height="20" Margin="0,0,0,4">
-                <TextBlock Text="클립보드" Foreground="{StaticResource GrayBrush}" FontSize="11"
-                           VerticalAlignment="Center" Margin="2,0,0,0" IsHitTestVisible="False"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <RadioButton x:Name="FilterAll" Style="{StaticResource SegBtn}" GroupName="ClipFilter"
+                                 Content="전체" IsChecked="True" Checked="Filter_All_Checked"/>
+                    <RadioButton x:Name="FilterText" Style="{StaticResource SegBtn}" GroupName="ClipFilter"
+                                 Content="텍스트" Checked="Filter_Text_Checked"/>
+                    <RadioButton x:Name="FilterImage" Style="{StaticResource SegBtn}" GroupName="ClipFilter"
+                                 Content="이미지" Checked="Filter_Image_Checked"/>
+                </StackPanel>
                 <ToggleButton x:Name="PinToggle" HorizontalAlignment="Right" VerticalAlignment="Center"
                               Width="20" Height="18" Cursor="Hand" ToolTip="팝업 고정(자동 닫힘 해제)"
                               Checked="PinToggle_Changed" Unchecked="PinToggle_Changed">
@@ -163,7 +195,7 @@
 
                                     <TextBlock Grid.Row="0" Text="{Binding Snippet}" Foreground="#FFDDDDDD"
                                                TextWrapping="Wrap" MaxHeight="110" TextTrimming="CharacterEllipsis"
-                                               Margin="0,0,60,0">
+                                               Margin="0,0,24,0">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Visible"/>
@@ -176,7 +208,7 @@
                                         </TextBlock.Style>
                                     </TextBlock>
 
-                                    <StackPanel Grid.Row="0" Orientation="Horizontal"
+                                    <StackPanel Grid.Row="0" Orientation="Vertical"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top">
                                         <Button Style="{StaticResource CardEdit}" Click="Edit_Click"
                                                 Tag="{Binding}" ToolTip="수정"/>

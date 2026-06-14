@@ -61,17 +61,30 @@ public partial class PathPopup : Window
         return IntPtr.Zero;
     }
 
-    /// <summary>기준 창(도크) 바로 아래에 배치. 아래 공간이 부족하면 위로 뒤집어 배치(겹침 방지).</summary>
-    public void ShowBelow(Window anchor)
+    /// <summary>
+    /// 기준 창(도크) 바로 아래에 배치. 아래 공간이 부족하면 위로 뒤집어 배치.
+    /// avoid(클립 팝업)가 같은 쪽으로 뒤집혀 겹치면 그 위/아래로 비켜 쌓는다(가장자리 겹침 방지).
+    /// </summary>
+    public void ShowBelow(Window anchor, Window? avoid = null)
     {
         Show();
         var wa = SystemParameters.WorkArea;
         double left = Math.Min(anchor.Left, wa.Right - ActualWidth);
         Left = Math.Max(wa.Left, left);
+
         double top = anchor.Top + anchor.ActualHeight + 6;
         // 아래쪽 공간이 부족하면 도크 위로 뒤집어 배치
         if (top + ActualHeight > wa.Bottom)
             top = anchor.Top - ActualHeight - 6;
+
+        // 클립 팝업과 세로로 겹치면 클립 팝업 기준으로 비켜 배치.
+        if (avoid != null && avoid.IsVisible
+            && top < avoid.Top + avoid.ActualHeight && top + ActualHeight > avoid.Top)
+        {
+            top = avoid.Top >= anchor.Top + anchor.ActualHeight
+                ? avoid.Top + avoid.ActualHeight + 6   // 클립이 도크 아래 → 경로는 클립 아래
+                : avoid.Top - ActualHeight - 6;        // 클립이 도크 위  → 경로는 클립 위
+        }
         Top = Math.Max(wa.Top, Math.Min(top, wa.Bottom - ActualHeight));
     }
 }

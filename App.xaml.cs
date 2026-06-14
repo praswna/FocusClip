@@ -197,7 +197,8 @@ public partial class App : Application
         RefreshActiveStates();
         _dock!.ShowAtCursor();
         if (_clipboard.Items.Count > 0) _clipPopup!.ShowAbove(_dock); // 클립이 있을 때만 도크 위에
-        if (_clipboard.Paths.Count > 0) _pathPopup!.ShowBelow(_dock); // 경로가 있을 때만 도크 아래에
+        if (_clipboard.Paths.Count > 0) // 경로가 있을 때만 도크 아래에(클립 팝업과 겹치지 않게)
+            _pathPopup!.ShowBelow(_dock, _clipPopup!.IsVisible ? _clipPopup : null);
         _hotkey!.CaptureExtraKeys = true;
         _overlayShownAt = DateTime.Now;
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
