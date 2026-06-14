@@ -1,0 +1,291 @@
+using System;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using FocusClip.Interop;
+using FocusClip.Models;
+
+namespace FocusClip.Services;
+
+/// <summary>
+/// 클립보드 변경을 감시(WM_CLIPBOARDUPDATE)하여 텍스트/이미지를 수집한다.
+/// (CM의 _check_clipboard/ClipWorker 대응 — 폴링 대신 OS 리스너로 더 정확/가볍게)
+/// </summary>
+public sealed class ClipboardService : IDisposable
+{
+    public const int MaxItems = 30;
+    public static string SaveDir { get; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ClipboardSaver");
+
+    public ObservableCollection<ClipItem> Items { get; } = new();
+
+    /// <summary>새 클립이 추가될 때 발생(토스트 알림용).</summary>
+    public event Action<ClipItem>? ItemAdded;
+
+    private HwndSource? _src;
+    private readonly DispatcherTimer _debounce;
+    private DateTime _internalCopyAt = DateTime.MinValue;
+
+    public ClipboardService()
+    {
+        _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _debounce.Tick += (_, _) => { _debounce.Stop(); ReadClipboard(); };
+    }
+
+    /// <summary>메시지 전용 창을 만들어 클립보드 리스너를 등록한다(UI 스레드에서 호출).</summary>
+    public void Start()
+    {
+        var pars = new HwndSourceParameters("FocusClipClipboardListener")
+        {
+            ParentWindow = NativeMethods.HWND_MESSAGE
+        };
+        _src = new HwndSource(pars);
+        _src.AddHook(WndProc);
+        NativeMethods.AddClipboardFormatListener(_src.Handle);
+    }
+
+    /// <summary>우리가 클립보드를 설정한 직후의 변경 이벤트를 무시하기 위한 표식.</summary>
+    public void MarkInternalCopy() => _internalCopyAt = DateTime.Now;
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr w, IntPtr l, ref bool handled)
+    {
+        if (msg == NativeMethods.WM_CLIPBOARDUPDATE)
+        {
+            _debounce.Stop();
+            _debounce.Start(); // 소스 앱이 쓰기를 끝낼 시간을 준 뒤 읽음
+        }
+        return IntPtr.Zero;
+    }
+
+    private void ReadClipboard()
+    {
+        if ((DateTime.Now - _internalCopyAt).TotalSeconds < 1.0) return; // 내부 복사 무시
+        try
+        {
+            if (Clipboard.ContainsImage())
+            {
+                var img = Clipboard.GetImage();
+                if (img != null) { AddImage(img); return; }
+            }
+            if (Clipboard.ContainsText())
+            {
+                string t = Clipboard.GetText();
+                if (!string.IsNullOrWhiteSpace(t)) AddText(t);
+            }
+        }
+        catch { /* 다른 앱이 클립보드를 잠금 → 다음 이벤트에서 재시도 */ }
+    }
+
+    private void AddText(string text)
+    {
+        string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
+        if (Dedup(hash)) return;
+        Insert(new ClipItem { IsImage = false, Text = text, Hash = hash });
+    }
+
+    private void AddImage(BitmapSource img)
+    {
+        if (!img.IsFrozen && img.CanFreeze) img.Freeze();
+        string hash = HashImage(img);
+        if (Dedup(hash)) return;
+
+        // C7: 원본은 메모리에 즉시 보관(붙여넣기 가능) + PNG 저장은 백그라운드로.
+        var item = new ClipItem
+        {
+            IsImage = true,
+            Hash = hash,
+            Thumb = MakeThumb(img),
+            FullImage = img,
+        };
+        Insert(item);
+        SaveImageAsync(item, img);
+    }
+
+    /// <summary>이미지를 백그라운드로 저장. 저장 완료 시 이미 삭제된 항목이면 고아 파일을 정리한다.</summary>
+    private static void SaveImageAsync(ClipItem item, BitmapSource img)
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                string path = SaveImage(img);
+                if (item.Removed) { try { File.Delete(path); } catch { } } // 저장 전에 삭제됨 → 고아 방지
+                else item.FilePath = path;
+            }
+            catch { }
+        });
+    }
+
+    /// <summary>같은 해시가 있으면 핀 구간 바로 아래(최상단 비핀 위치)로 이동하고 true 반환.</summary>
+    private bool Dedup(string hash)
+    {
+        var existing = Items.FirstOrDefault(c => c.Hash == hash);
+        if (existing == null) return false;
+        if (!existing.Pinned)
+        {
+            int i = Items.IndexOf(existing);
+            int top = PinnedCountFront();
+            if (i > top) Items.Move(i, top);
+        }
+        return true;
+    }
+
+    /// <summary>맨 앞에 연속으로 핀된 항목 수(핀 구간 경계).</summary>
+    private int PinnedCountFront()
+    {
+        int n = 0;
+        while (n < Items.Count && Items[n].Pinned) n++;
+        return n;
+    }
+
+    private void Insert(ClipItem item)
+    {
+        // 새 항목은 핀 구간 바로 아래(비핀 최상단)에 넣는다.
+        Items.Insert(PinnedCountFront(), item);
+        // 용량 초과 시 뒤에서부터 '비핀' 항목만 제거(핀 항목은 보호).
+        while (Items.Count > MaxItems)
+        {
+            int idx = -1;
+            for (int i = Items.Count - 1; i >= 0; i--)
+                if (!Items[i].Pinned) { idx = i; break; }
+            if (idx < 0) break; // 전부 핀이면 제거하지 않음
+            Items.RemoveAt(idx);
+        }
+        try { ItemAdded?.Invoke(item); } catch { }
+    }
+
+    /// <summary>카드 핀 토글: 핀이면 최상단으로, 핀 해제면 핀 구간 바로 아래로 이동.</summary>
+    public void TogglePin(ClipItem item)
+    {
+        if (Items.IndexOf(item) < 0) return;
+        if (!item.Pinned)
+        {
+            item.Pinned = true;
+            int cur = Items.IndexOf(item);
+            if (cur != 0) Items.Move(cur, 0);          // 최상단으로
+        }
+        else
+        {
+            item.Pinned = false;
+            int remainingPinned = Items.Count(c => c.Pinned); // 이 항목 제외(이미 false)
+            int target = Math.Min(remainingPinned, Items.Count - 1);
+            int cur = Items.IndexOf(item);
+            if (cur != target) Items.Move(cur, target); // 남은 핀 구간 바로 아래로
+        }
+    }
+
+    /// <summary>C4: 텍스트 클립 내용 교체(해시 갱신 + 클립보드 반영).</summary>
+    public void ReplaceText(ClipItem item, string newText)
+    {
+        if (item.IsImage) return;
+        item.Text = newText; // Snippet 알림 포함
+        item.Hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(newText)));
+        try { MarkInternalCopy(); Clipboard.SetText(newText); } catch { }
+    }
+
+    /// <summary>C5: 이미지 클립을 편집본(주석 합성)으로 교체. 옛 파일 삭제 후 백그라운드 재저장.</summary>
+    public void ReplaceImage(ClipItem item, BitmapSource newImg)
+    {
+        if (!item.IsImage) return;
+        if (!newImg.IsFrozen && newImg.CanFreeze) newImg.Freeze();
+        try { if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath)) File.Delete(item.FilePath); }
+        catch { }
+        item.FullImage = newImg;
+        item.Thumb = MakeThumb(newImg);
+        item.Hash = HashImage(newImg);
+        item.FilePath = null;
+        Task.Run(() => { try { item.FilePath = SaveImage(newImg); } catch { } });
+        try
+        {
+            MarkInternalCopy();
+            Clipboard.SetImage(newImg);
+        }
+        catch { }
+    }
+
+    /// <summary>C4(새 클립): 편집한 텍스트를 새 카드로 추가 + 클립보드 반영.</summary>
+    public void AddEditedText(string text)
+    {
+        string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
+        Insert(new ClipItem { IsImage = false, Text = text, Hash = hash });
+        try { MarkInternalCopy(); Clipboard.SetText(text); } catch { }
+    }
+
+    /// <summary>C5(새 클립): 편집한 이미지를 새 카드로 추가(비동기 저장) + 클립보드 반영.</summary>
+    public void AddEditedImage(BitmapSource img)
+    {
+        if (!img.IsFrozen && img.CanFreeze) img.Freeze();
+        var item = new ClipItem
+        {
+            IsImage = true,
+            Hash = HashImage(img),
+            Thumb = MakeThumb(img),
+            FullImage = img,
+        };
+        Insert(item);
+        SaveImageAsync(item, img);
+        try { MarkInternalCopy(); Clipboard.SetImage(img); } catch { }
+    }
+
+    /// <summary>클립 항목을 목록에서 제거하고 저장 파일도 삭제한다.</summary>
+    public void Remove(ClipItem item)
+    {
+        item.Removed = true; // 진행 중인 비동기 저장이 끝나면 파일을 정리하도록 표식
+        Items.Remove(item);
+        try { if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath)) File.Delete(item.FilePath); }
+        catch { }
+    }
+
+    private static string HashImage(BitmapSource bmp)
+    {
+        try
+        {
+            int stride = (bmp.PixelWidth * ((bmp.Format.BitsPerPixel + 7) / 8));
+            var bytes = new byte[stride * bmp.PixelHeight];
+            bmp.CopyPixels(bytes, stride, 0);
+            return Convert.ToHexString(MD5.HashData(bytes));
+        }
+        catch
+        {
+            return $"img_{bmp.PixelWidth}x{bmp.PixelHeight}_{DateTime.Now.Ticks}";
+        }
+    }
+
+    private static string SaveImage(BitmapSource bmp)
+    {
+        Directory.CreateDirectory(SaveDir);
+        string path = Path.Combine(SaveDir, $"clip_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
+        var enc = new PngBitmapEncoder();
+        enc.Frames.Add(BitmapFrame.Create(bmp));
+        using var fs = File.Create(path);
+        enc.Save(fs);
+        return path;
+    }
+
+    private static ImageSource MakeThumb(BitmapSource bmp, int maxW = 240)
+    {
+        double scale = Math.Min(1.0, (double)maxW / Math.Max(1, bmp.PixelWidth));
+        if (scale >= 1.0) return bmp;
+        var tb = new TransformedBitmap(bmp, new ScaleTransform(scale, scale));
+        tb.Freeze();
+        return tb;
+    }
+
+    public void Dispose()
+    {
+        if (_src != null)
+        {
+            try { NativeMethods.RemoveClipboardFormatListener(_src.Handle); } catch { }
+            _src.RemoveHook(WndProc);
+            _src.Dispose();
+            _src = null;
+        }
+    }
+}

@@ -1,0 +1,23 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- 현행 CM/FM 색상 토큰 유지 -->
+    <Color x:Key="BgColor">#FF2B2B2B</Color>
+    <Color x:Key="Bg2Color">#FF333333</Color>
+    <Color x:Key="Bg3Color">#FF3D3D3D</Color>
+    <Color x:Key="TitleColor">#FF1E1E1E</Color>
+    <Color x:Key="AccentColor">#FF0D9488</Color>
+    <Color x:Key="LineColor">#FF444444</Color>
+    <Color x:Key="GrayColor">#FF888888</Color>
+    <Color x:Key="NeonColor">#FF00FFFF</Color>
+
+    <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}"/>
+    <SolidColorBrush x:Key="Bg2Brush" Color="{StaticResource Bg2Color}"/>
+    <SolidColorBrush x:Key="Bg3Brush" Color="{StaticResource Bg3Color}"/>
+    <SolidColorBrush x:Key="TitleBrush" Color="{StaticResource TitleColor}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="LineBrush" Color="{StaticResource LineColor}"/>
+    <SolidColorBrush x:Key="GrayBrush" Color="{StaticResource GrayColor}"/>
+    <SolidColorBrush x:Key="NeonBrush" Color="{StaticResource NeonColor}"/>
+
+</ResourceDictionary>

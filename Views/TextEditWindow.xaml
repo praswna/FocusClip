@@ -1,0 +1,43 @@
+<Window x:Class="FocusClip.Views.TextEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="텍스트 편집"
+        Width="540" Height="440"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}"
+        Foreground="White"
+        FontFamily="Segoe UI">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Bg3Brush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Margin" Value="4,0,0,0"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="휠로 글자 크기 조절" Foreground="{StaticResource GrayBrush}"
+                   FontSize="11" Margin="2,0,0,6"/>
+
+        <TextBox x:Name="Editor" Grid.Row="1"
+                 AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                 Background="{StaticResource Bg2Brush}" Foreground="White"
+                 BorderBrush="{StaticResource LineBrush}" Padding="6" FontSize="14"
+                 PreviewMouseWheel="Editor_PreviewMouseWheel"/>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="원본 덮어쓰기" Click="Overwrite_Click"/>
+            <Button Content="새 클립보드로 생성" Click="SaveNew_Click"
+                    Background="{StaticResource AccentBrush}"/>
+            <Button Content="취소" Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

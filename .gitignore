@@ -1,0 +1,13 @@
+bin/
+obj/
+*.user
+*.suo
+*.binlog
+.vs/
+.idea/
+publish/
+Publish/
+
+# OS junk
+Thumbs.db
+desktop.ini

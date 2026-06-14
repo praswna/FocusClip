@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <!-- 트레이 아이콘은 내장 WinForms NotifyIcon 사용 (외부 의존성 0, .NET8 완전 호환) -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>FocusClip</AssemblyName>
+    <RootNamespace>FocusClip</RootNamespace>
+    <ApplicationIcon>app_icon.ico</ApplicationIcon>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 트레이/창에서 pack URI로 참조할 수 있도록 아이콘을 리소스로 포함 -->
+    <Resource Include="app_icon.ico" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,72 @@
+<Window x:Class="FocusClip.Views.ImageAnnotateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="이미지 주석"
+        Width="820" Height="660"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}"
+        Foreground="White"
+        FontFamily="Segoe UI">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource Bg3Brush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Margin" Value="3,0"/>
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+        <!-- 도구 모음 -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Bg2Brush}" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="PenBtn" Content="✏ 펜" Click="Pen_Click"/>
+                <Button x:Name="EraseBtn" Content="🩹 지우개" Click="Erase_Click"/>
+                <Border Width="1" Background="{StaticResource LineBrush}" Margin="6,2"/>
+                <TextBlock Text="색" VerticalAlignment="Center" Margin="2,0,4,0"/>
+                <Button Width="22" Background="#FFFF3B30" Click="Color_Click" Tag="#FFFF3B30" Content=""/>
+                <Button Width="22" Background="#FFFFCC00" Click="Color_Click" Tag="#FFFFCC00" Content=""/>
+                <Button Width="22" Background="#FF34C759" Click="Color_Click" Tag="#FF34C759" Content=""/>
+                <Button Width="22" Background="#FF0A84FF" Click="Color_Click" Tag="#FF0A84FF" Content=""/>
+                <Button Width="22" Background="#FF000000" Click="Color_Click" Tag="#FF000000" Content=""/>
+                <Border Width="1" Background="{StaticResource LineBrush}" Margin="6,2"/>
+                <TextBlock Text="굵기" VerticalAlignment="Center" Margin="2,0,4,0"/>
+                <Slider x:Name="ThickSlider" Width="90" Minimum="1" Maximum="24" Value="4"
+                        VerticalAlignment="Center" ValueChanged="Thick_Changed"/>
+                <Border Width="1" Background="{StaticResource LineBrush}" Margin="6,2"/>
+                <Button Content="＋" Click="ZoomIn_Click" ToolTip="확대"/>
+                <Button Content="－" Click="ZoomOut_Click" ToolTip="축소"/>
+                <Button Content="1:1" Click="ZoomReset_Click"/>
+                <TextBlock x:Name="ZoomLabel" Text="100%" Foreground="{StaticResource AccentBrush}"
+                           FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,0,0" Width="48"/>
+                <Border Width="1" Background="{StaticResource LineBrush}" Margin="6,2"/>
+                <Button x:Name="UndoBtn" Content="↶ 실행취소" Click="Undo_Click"/>
+                <Button x:Name="RedoBtn" Content="↷ 다시실행" Click="Redo_Click"/>
+                <Button Content="🗑 전체지우기" Click="Clear_Click"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 하단 버튼 -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Bg2Brush}" Padding="6">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="저장" Click="Save_Click" Padding="16,4"/>
+                <Button Content="취소" Click="Cancel_Click" Padding="16,4"/>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer x:Name="Scroller" Background="#FF1E1E1E"
+                      HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      PreviewMouseWheel="Scroller_PreviewMouseWheel"
+                      PreviewMouseDown="Scroller_PreviewMouseDown"
+                      PreviewMouseMove="Scroller_PreviewMouseMove"
+                      PreviewMouseUp="Scroller_PreviewMouseUp">
+            <Grid x:Name="Surface" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
+                <Grid.LayoutTransform>
+                    <ScaleTransform x:Name="Zoom" ScaleX="1" ScaleY="1"/>
+                </Grid.LayoutTransform>
+                <Image x:Name="BaseImage"/>
+                <InkCanvas x:Name="Ink" Background="Transparent"/>
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
