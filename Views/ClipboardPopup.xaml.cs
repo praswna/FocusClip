@@ -151,6 +151,9 @@ public partial class ClipboardPopup : Window
         double left = Math.Min(anchor.Left, wa.Right - ActualWidth);
         Left = Math.Max(wa.Left, left);
         double top = anchor.Top - ActualHeight - 6;
-        Top = Math.Max(wa.Top, top);
+        // 위쪽 공간이 부족하면(클램프 시 도크와 겹침) 도크 아래로 뒤집어 배치
+        if (top < wa.Top)
+            top = anchor.Top + anchor.ActualHeight + 6;
+        Top = Math.Max(wa.Top, Math.Min(top, wa.Bottom - ActualHeight));
     }
 }
