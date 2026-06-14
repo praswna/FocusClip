@@ -140,7 +140,7 @@ public partial class App : Application
         _toast = new Toast();
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
-            _toast?.ShowToast(item.IsImage ? "🖼 이미지" : item.Snippet));
+            _toast?.ShowToast(item.IsImage ? "🖼 이미지" : item.IsPath ? item.PathName : item.Snippet));
         _clipPopup = new ClipboardPopup();
         _clipPopup.SetItems(_clipboard.Items);
         _clipPopup.ClipSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
@@ -152,6 +152,7 @@ public partial class App : Application
         _pathPopup.SetItems(_clipboard.Paths);
         _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item)); // 전체 경로 붙여넣기
         _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
+        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item)); // 로컬 경로/URL 열기
     }
 
     private void SetupHotkey()
@@ -209,7 +210,7 @@ public partial class App : Application
     {
         _dock?.Hide();
         if (force || !(_clipPopup?.Pinned ?? false)) _clipPopup?.Hide();
-        _pathPopup?.Hide();
+        if (force || !(_pathPopup?.Pinned ?? false)) _pathPopup?.Hide();
         if (_hotkey != null) _hotkey.CaptureExtraKeys = false;
         _outsidePoll?.Stop();
     }
@@ -223,7 +224,8 @@ public partial class App : Application
             bool popupVisible = _clipPopup?.IsVisible ?? false;
             bool pathVisible = _pathPopup?.IsVisible ?? false;
             bool pinned = _clipPopup?.Pinned ?? false;
-            if (!dockVisible && (!popupVisible || pinned) && !pathVisible) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
+            bool pathPinned = _pathPopup?.Pinned ?? false;
+            if (!dockVisible && (!popupVisible || pinned) && (!pathVisible || pathPinned)) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
             if ((DateTime.Now - _overlayShownAt).TotalMilliseconds < 200) return;            // 표시 직후 유예
 
             bool clicked = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0
@@ -297,6 +299,19 @@ public partial class App : Application
         var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         t.Tick += (_, _) => { t.Stop(); PasteService.SendCtrlV(); };
         t.Start();
+    }
+
+    // ── 경로/URL 열기(셸 실행: 로컬은 탐색기/기본앱, URL은 기본 브라우저) ──
+    private void OnPathOpen(ClipItem item)
+    {
+        HideOverlay(force: true);
+        if (!item.PathExists) // 이동/삭제된 로컬 경로
+        {
+            _toast?.ShowToast("경로를 찾을 수 없음");
+            return;
+        }
+        try { Process.Start(new ProcessStartInfo(item.Text) { UseShellExecute = true }); }
+        catch { _toast?.ShowToast("열 수 없음"); }
     }
 
     // ── 클립 편집(C4 텍스트 / C5 이미지 주석) ──

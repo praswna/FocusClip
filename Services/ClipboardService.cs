@@ -92,7 +92,7 @@ public sealed class ClipboardService : IDisposable
             {
                 string t = Clipboard.GetText();
                 if (string.IsNullOrWhiteSpace(t)) return;
-                if (IsPathLike(t)) AddPath(t.Trim());   // 경로 패턴 텍스트는 경로 팝업으로
+                if (IsPathLike(t) || IsUrlLike(t)) AddPath(t.Trim()); // 경로/URL은 경로 팝업으로
                 else AddText(t);
             }
         }
@@ -107,11 +107,30 @@ public sealed class ClipboardService : IDisposable
         return System.Text.RegularExpressions.Regex.IsMatch(t, @"^[A-Za-z]:\\") || t.StartsWith(@"\\");
     }
 
+    /// <summary>단일 줄의 http(s) URL인지.</summary>
+    private static bool IsUrlLike(string t)
+    {
+        t = t.Trim();
+        if (t.Contains('\n')) return false;
+        return t.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || t.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+    }
+
     private void AddPath(string path)
     {
-        string hash = "path:" + Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(path)));
+        // 정규화 키로 dedup(대소문자/슬래시 차이로 같은 경로가 중복되지 않게). 표시는 원본 유지.
+        string key = NormalizePathKey(path);
+        string hash = "path:" + Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(key)));
         if (Dedup(Paths, hash)) return;
         Insert(Paths, new ClipItem { IsPath = true, Text = path, Hash = hash });
+    }
+
+    /// <summary>dedup용 경로 정규화. 로컬은 슬래시 통일+소문자, URL은 후행 슬래시만 정리.</summary>
+    private static string NormalizePathKey(string p)
+    {
+        p = p.Trim();
+        if (IsUrlLike(p)) return p.TrimEnd('/'); // URL은 대소문자가 경로를 구분할 수 있어 보존
+        return p.Replace('/', '\\').TrimEnd('\\').ToLowerInvariant();
     }
 
     private void AddText(string text)

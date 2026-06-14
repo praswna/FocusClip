@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using FocusClip.Interop;
@@ -13,13 +15,45 @@ public partial class PathPopup : Window
 {
     public event Action<ClipItem>? PathSelected;
     public event Action<ClipItem>? PathDeleteRequested;
+    public event Action<ClipItem>? PathOpenRequested; // 로컬 경로/URL 열기
+
+    /// <summary>팝업 핀(자동 닫힘 해제). true면 외부 클릭/앱 활성화에도 닫지 않음.</summary>
+    public bool Pinned { get; private set; }
+
+    private enum PathFilter { All, Local, Url }
+    private PathFilter _filter = PathFilter.All;
+    private ICollectionView? _view;
 
     public PathPopup()
     {
         InitializeComponent();
     }
 
-    public void SetItems(IEnumerable<ClipItem> items) => PathList.ItemsSource = items;
+    public void SetItems(IEnumerable<ClipItem> items)
+    {
+        _view = CollectionViewSource.GetDefaultView(items);
+        _view.Filter = o => o is ClipItem c && _filter switch
+        {
+            PathFilter.Local => !c.IsUrl,
+            PathFilter.Url => c.IsUrl,
+            _ => true,
+        };
+        PathList.ItemsSource = _view;
+    }
+
+    // ── 로컬/URL 필터 토글 ──
+    private void Filter_All_Checked(object sender, RoutedEventArgs e) => ApplyFilter(PathFilter.All);
+    private void Filter_Local_Checked(object sender, RoutedEventArgs e) => ApplyFilter(PathFilter.Local);
+    private void Filter_Url_Checked(object sender, RoutedEventArgs e) => ApplyFilter(PathFilter.Url);
+
+    private void ApplyFilter(PathFilter f)
+    {
+        _filter = f;
+        _view?.Refresh();
+    }
+
+    private void PinToggle_Changed(object sender, RoutedEventArgs e)
+        => Pinned = PinToggle.IsChecked == true;
 
     private void Card_Click(object sender, MouseButtonEventArgs e)
     {
@@ -32,6 +66,13 @@ public partial class PathPopup : Window
         e.Handled = true; // 카드 선택(붙여넣기)으로 전파 방지
         if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
             PathDeleteRequested?.Invoke(item);
+    }
+
+    private void Open_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; // 카드 선택(붙여넣기)으로 전파 방지
+        if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
+            PathOpenRequested?.Invoke(item);
     }
 
     // ── 스크롤: 휠로 직접 스크롤(무활성 창에서도 확실히 동작) ──

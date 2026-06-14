@@ -50,24 +50,57 @@ public class ClipItem : INotifyPropertyChanged
     public string Snippet => IsImage ? "" : (Text.Length > 300 ? Text[..300] : Text);
 
     // ── 경로 항목 함축 표시 ──
-    /// <summary>경로의 마지막 세그먼트(파일/폴더명) — 카드 주 텍스트.</summary>
+    /// <summary>http(s) URL 여부.</summary>
+    public bool IsUrl =>
+        Text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        Text.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>로컬 경로가 실제 존재하는지(URL은 항상 true). 카드 흐림/열기 안내용.</summary>
+    public bool PathExists
+    {
+        get
+        {
+            if (IsUrl) return true;
+            string t = Text.Trim();
+            try { return System.IO.File.Exists(t) || System.IO.Directory.Exists(t); }
+            catch { return false; }
+        }
+    }
+
+    /// <summary>경로/URL의 주 텍스트(파일·폴더명 또는 URL 마지막 세그먼트).</summary>
     public string PathName
     {
         get
         {
-            string t = Text.Trim().TrimEnd('\\', '/');
+            string t = Text.Trim();
+            if (IsUrl)
+            {
+                try
+                {
+                    var u = new Uri(t);
+                    string seg = u.Segments.Length > 0 ? u.Segments[^1].Trim('/') : "";
+                    return string.IsNullOrEmpty(seg) ? u.Host : seg;
+                }
+                catch { return t; }
+            }
+            t = t.TrimEnd('\\', '/');
             if (t.Length == 0) return Text;
             string name = System.IO.Path.GetFileName(t);
             return string.IsNullOrEmpty(name) ? t : name; // 루트(C:\) 등은 원문
         }
     }
 
-    /// <summary>부모 경로를 중간 생략한 보조 텍스트(예: C:\…\상위폴더).</summary>
+    /// <summary>보조(흐린) 텍스트 — URL은 호스트, 로컬은 부모 경로 축약(C:\…\상위폴더).</summary>
     public string PathDir
     {
         get
         {
-            string t = Text.Trim().TrimEnd('\\', '/');
+            string t = Text.Trim();
+            if (IsUrl)
+            {
+                try { return new Uri(t).Host; } catch { return ""; }
+            }
+            t = t.TrimEnd('\\', '/');
             string? dir = null;
             try { dir = System.IO.Path.GetDirectoryName(t); } catch { }
             if (string.IsNullOrEmpty(dir)) return "";
