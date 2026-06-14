@@ -1,0 +1,76 @@
+# FocusClip
+
+FocusManager(AHK)와 Clipboard-Manager(PyQt6)를 단일 네이티브 앱으로 통합한 Windows 유틸리티.  
+C# / .NET 8 / WPF로 작성되었으며 외부 런타임 의존 없이 단일 EXE로 배포된다.
+
+## 주요 기능
+
+| 기능 | 설명 |
+|------|------|
+| **런처 도크** | CapsLock 누르면 등록 앱 목록 팝업. 숫자키(1~4)로 즉시 전환 |
+| **클립보드 히스토리** | 텍스트/이미지 최대 30개 보관, 팝업에서 선택 후 자동 붙여넣기 |
+| **항상 위 토글** | 사이드바에서 우클릭 → 대상 창을 TopMost 전환 |
+| **텍스트 편집기** | 클립 텍스트를 편집 후 재붙여넣기 |
+| **이미지 어노테이션** | 클립 이미지에 텍스트/도형 주석 추가 후 저장 |
+| **토스트 알림** | 새 클립 캡처 시 우하단 알림 |
+| **시스템 트레이** | 트레이 상주, 우클릭 메뉴로 설정/종료 |
+| **자동 시작** | 설정에서 Windows 시작 시 자동 실행 등록/해제 |
+
+## 단축키
+
+| 키 | 동작 |
+|----|------|
+| `CapsLock` | 런처 도크 열기/닫기 |
+| `1` ~ `4` | 도크 표시 중 — 해당 번호 앱 활성화(없으면 실행) |
+| `Esc` | 도크/팝업 닫기 |
+| 그 외 키 | 도크 자동 닫기(키는 대상 앱에 그대로 전달) |
+
+기본 단축키(CapsLock)는 설정 창에서 변경 가능.
+
+## 빌드 및 실행
+
+```
+dotnet build -c Release
+dotnet run
+```
+
+단일 EXE 배포:
+
+```
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+```
+
+출력: `bin\Release\net8.0-windows\win-x64\publish\FocusClip.exe`
+
+## 요구 사항
+
+- Windows 10/11 x64
+- .NET 8 Runtime (또는 self-contained 배포 사용)
+
+## 설정 파일
+
+`%APPDATA%\FocusClip\config.json`에 앱 목록·단축키 설정이 저장된다. 직접 편집하거나 설정 창을 통해 관리한다.
+
+## 프로젝트 구조
+
+```
+FocusClip/
+├── Models/          AppConfig, AppEntry, ClipItem
+├── Services/        ClipboardService, HotkeyService, WindowManager
+│                    ConfigService, IconService, PasteService, StartupService
+├── Views/           LauncherDock, Sidebar, ClipboardPopup
+│                    SettingsWindow, TextEditWindow, ImageAnnotateWindow, Toast
+├── Interop/         NativeMethods (Win32 P/Invoke)
+├── Themes/          Dark.xaml
+└── App.xaml
+```
+
+## 원본 앱과의 대응
+
+| FocusClip | 기존 |
+|-----------|------|
+| `HotkeyService` (LL 키보드 후크) | FocusManager AHK 스크립트 |
+| `ClipboardService` (WM_CLIPBOARDUPDATE) | Clipboard-Manager 폴링 스레드 |
+| `WindowManager.ActivateOrRun` | FM `ActivateOrRun` 함수 |
+| `LauncherDock` | FM 팝업 UI |
+| `ClipboardPopup` | CM 팝업 UI |
