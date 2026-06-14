@@ -62,6 +62,9 @@ public class ClipItem : INotifyPropertyChanged
         {
             if (IsUrl) return true;
             string t = Text.Trim();
+            // UNC(\\server\...)는 오프라인일 때 File/Directory.Exists가 UI 스레드를 수 초간
+            // 블로킹하므로 검사를 건너뛰고 존재한다고 가정(팝업 응답성 보호).
+            if (t.StartsWith(@"\\")) return true;
             try { return System.IO.File.Exists(t) || System.IO.Directory.Exists(t); }
             catch { return false; }
         }
