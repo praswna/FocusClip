@@ -59,7 +59,7 @@ FocusClip/
 ├── Models/          AppConfig, AppEntry, ClipItem
 ├── Services/        ClipboardService, HotkeyService, WindowManager
 │                    ConfigService, IconService, PasteService, StartupService
-├── Views/           LauncherDock, Sidebar, ClipboardPopup
+├── Views/           LauncherDock, Sidebar, ClipboardPopup, PathPopup
 │                    SettingsWindow, TextEditWindow, ImageAnnotateWindow, Toast
 ├── Interop/         NativeMethods (Win32 P/Invoke)
 ├── Themes/          Dark.xaml
