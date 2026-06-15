@@ -86,9 +86,14 @@ public partial class ClipboardPopup : Window
             var data = new DataObject();
             if (item.IsImage)
             {
+                // 저장된 PNG 파일이 있으면 파일 드롭만 제공한다.
+                // SetImage 는 원본 비트맵을 드래그 중 DIB(CF_DIB)로 동기 직렬화하므로
+                // 큰 캡처일수록 매우 느리다. 대상(탐색기·편집기·채팅 등)은 파일 드롭이면
+                // 충분하므로, 비트맵은 파일이 아직 저장되지 않은 경우의 폴백으로만 첨부한다.
                 if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
                     data.SetFileDropList(new StringCollection { item.FilePath });
-                if (item.FullImage != null) data.SetImage(item.FullImage);
+                else if (item.FullImage != null)
+                    data.SetImage(item.FullImage);
             }
             else
             {
