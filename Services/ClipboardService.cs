@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
@@ -24,6 +26,9 @@ public sealed class ClipboardService : IDisposable
     public const int MaxItems = 30;
     public static string SaveDir { get; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ClipboardSaver");
+    private static readonly string HistoryPath =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                     "FocusClip", "clips.json");
 
     public ObservableCollection<ClipItem> Items { get; } = new();
 
@@ -35,7 +40,12 @@ public sealed class ClipboardService : IDisposable
 
     private HwndSource? _src;
     private readonly DispatcherTimer _debounce;
+    private DispatcherTimer? _saveTimer;
     private DateTime _internalCopyAt = DateTime.MinValue;
+
+    // 직렬화용 레코드 (System.Text.Json이 생성자 파라미터로 매핑)
+    private record ClipRecord(bool IsImage, string Text, string? FilePath, string Hash, bool Pinned, DateTime Time);
+    private record ClipStore(List<ClipRecord> Items, List<ClipRecord> Paths);
 
     public ClipboardService()
     {
@@ -210,6 +220,7 @@ public sealed class ClipboardService : IDisposable
             col.RemoveAt(idx);
         }
         try { ItemAdded?.Invoke(item); } catch { }
+        ScheduleSave();
     }
 
     /// <summary>카드 핀 토글: 핀이면 최상단으로, 핀 해제면 핀 구간 바로 아래로 이동.</summary>
@@ -230,6 +241,7 @@ public sealed class ClipboardService : IDisposable
             int cur = Items.IndexOf(item);
             if (cur != target) Items.Move(cur, target); // 남은 핀 구간 바로 아래로
         }
+        ScheduleSave();
     }
 
     /// <summary>C4: 텍스트 클립 내용 교체(해시 갱신 + 클립보드 반영).</summary>
@@ -292,6 +304,7 @@ public sealed class ClipboardService : IDisposable
         if (!Items.Remove(item)) Paths.Remove(item); // 경로 항목은 Paths에 있음
         try { if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath)) File.Delete(item.FilePath); }
         catch { }
+        ScheduleSave();
     }
 
     private static string HashImage(BitmapSource bmp)
@@ -329,8 +342,121 @@ public sealed class ClipboardService : IDisposable
         return tb;
     }
 
+    // ── 영구 저장 (P004/P012) ──
+
+    /// <summary>시작 시 clips.json에서 이전 히스토리 복원. Start() 호출 전에 불러야 한다. 이미지 Thumb/FullImage는 UI 블로킹 방지를 위해 백그라운드에서 비동기 로드된다.</summary>
+    public void LoadHistory()
+    {
+        if (!File.Exists(HistoryPath)) return;
+        try
+        {
+            var json = File.ReadAllText(HistoryPath);
+            var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var store = JsonSerializer.Deserialize<ClipStore>(json, opts);
+            if (store == null) return;
+            foreach (var r in store.Items ?? [])
+            {
+                if (r.IsImage)
+                {
+                    if (string.IsNullOrEmpty(r.FilePath) || !File.Exists(r.FilePath)) continue;
+                    // 항목을 먼저 추가하고 Thumb/FullImage는 백그라운드 로드 — 큰 PNG를 UI 스레드에서
+                    // 동기 디코딩하면 30개 기준 수 초간 UI 가 멈춘다.
+                    var item = new ClipItem { IsImage = true, Hash = r.Hash, FilePath = r.FilePath,
+                        Pinned = r.Pinned, Time = r.Time };
+                    Items.Add(item);
+                    var path = r.FilePath;
+                    Task.Run(() =>
+                    {
+                        var img = LoadBitmapFile(path);
+                        if (img == null) return;
+                        var thumb = MakeThumb(img);
+                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                        {
+                            item.FullImage = img;
+                            item.Thumb = thumb;
+                        });
+                    });
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(r.Text)) continue;
+                    Items.Add(new ClipItem { Text = r.Text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time });
+                }
+            }
+            foreach (var r in store.Paths ?? [])
+            {
+                if (string.IsNullOrEmpty(r.Text)) continue;
+                Paths.Add(new ClipItem { IsPath = true, Text = r.Text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time });
+            }
+        }
+        catch { }
+    }
+
+    // Insert/Remove/TogglePin 후 300ms 디바운스로 저장(연속 변경 시 파일 쓰기 최소화).
+    private void ScheduleSave()
+    {
+        if (_saveTimer == null)
+        {
+            _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); DoSave(); };
+        }
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>현재 Items·Paths를 clips.json으로 직렬화. UI 스레드에서 컬렉션을 읽고 파일 쓰기는 백그라운드 Task로 위임.</summary>
+    private void DoSave()
+    {
+        try
+        {
+            // 컬렉션 접근은 UI 스레드에서, 파일 쓰기는 백그라운드로 분리.
+            // File.WriteAllText 가 Dropbox 등 외부 잠금으로 블로킹되어도 UI가 멈추지 않는다.
+            var store = new ClipStore(
+                Items.Select(x => new ClipRecord(x.IsImage, x.Text ?? "", x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
+                Paths.Select(x => new ClipRecord(false, x.Text ?? "", null, x.Hash, x.Pinned, x.Time)).ToList());
+            string json = JsonSerializer.Serialize(store);
+            Task.Run(() =>
+            {
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
+                    File.WriteAllText(HistoryPath, json);
+                }
+                catch { }
+            });
+        }
+        catch { }
+    }
+
+    private static BitmapSource? LoadBitmapFile(string path)
+    {
+        try
+        {
+            var b = new BitmapImage();
+            b.BeginInit();
+            b.CacheOption = BitmapCacheOption.OnLoad;
+            b.UriSource = new Uri(path);
+            b.EndInit();
+            b.Freeze();
+            return b;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>클립보드 리스너 해제. 종료 시 Task.Run 완료를 보장할 수 없으므로 히스토리를 동기 저장 후 반환.</summary>
     public void Dispose()
     {
+        _saveTimer?.Stop();
+        // 종료 시에는 Task.Run 완료를 보장할 수 없으므로 동기 저장.
+        try
+        {
+            var store = new ClipStore(
+                Items.Select(x => new ClipRecord(x.IsImage, x.Text ?? "", x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
+                Paths.Select(x => new ClipRecord(false, x.Text ?? "", null, x.Hash, x.Pinned, x.Time)).ToList());
+            Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
+            File.WriteAllText(HistoryPath, JsonSerializer.Serialize(store));
+        }
+        catch { }
         if (_src != null)
         {
             try { NativeMethods.RemoveClipboardFormatListener(_src.Handle); } catch { }

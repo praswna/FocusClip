@@ -15,13 +15,14 @@ using FocusClip.Models;
 
 namespace FocusClip.Views;
 
-/// <summary>클립보드 항목 카드 목록 팝업. (CM의 ContentPopup 대응)</summary>
+/// <summary>클립보드 항목 카드 목록 팝업. 클릭=붙여넣기, 드래그=다른 앱에 직접 드롭. (CM의 ContentPopup 대응)</summary>
 public partial class ClipboardPopup : Window
 {
     public event Action<ClipItem>? ClipSelected;
     public event Action<ClipItem>? ClipDeleteRequested;
     public event Action<ClipItem>? ClipPinToggled;   // C2: 카드 핀 토글
     public event Action<ClipItem>? ClipEditRequested; // C4/C5: 카드 우클릭 편집
+    public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>C1: 팝업 핀(자동 닫힘 해제). true면 앱 활성화/클립 선택에도 닫지 않음.</summary>
     public bool Pinned { get; private set; }
@@ -83,13 +84,14 @@ public partial class ClipboardPopup : Window
         _cardDragHappened = true; // 뒤따르는 Card_Click(복사+붙여넣기) 억제
         try
         {
-            var data = new DataObject();
+            DataObject data;
             if (item.IsImage)
             {
                 // 저장된 PNG 파일이 있으면 파일 드롭만 제공한다.
                 // SetImage 는 원본 비트맵을 드래그 중 DIB(CF_DIB)로 동기 직렬화하므로
                 // 큰 캡처일수록 매우 느리다. 대상(탐색기·편집기·채팅 등)은 파일 드롭이면
                 // 충분하므로, 비트맵은 파일이 아직 저장되지 않은 경우의 폴백으로만 첨부한다.
+                data = new DataObject();
                 if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
                     data.SetFileDropList(new StringCollection { item.FilePath });
                 else if (item.FullImage != null)
@@ -97,9 +99,17 @@ public partial class ClipboardPopup : Window
             }
             else
             {
-                data.SetText(item.Text);
+                // SetText 로 CF_TEXT(ANSI 변환 포함)+CF_UNICODETEXT 등록 → 주소창 등 다양한 대상 호환.
+                data = PathPopup.BuildTextData(item.Text);
             }
-            DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
+            // Esc 취소는 DragFailed 로 보지 않는다.
+            bool cancelled = false;
+            QueryContinueDragEventHandler qcd = (_, qe) => { if (qe.EscapePressed) cancelled = true; };
+            var src = (UIElement)sender;
+            src.QueryContinueDrag += qcd;
+            var effect = DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
+            src.QueryContinueDrag -= qcd;
+            if (effect == DragDropEffects.None && !cancelled) DragFailed?.Invoke();
         }
         catch { }
     }

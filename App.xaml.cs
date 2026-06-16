@@ -138,6 +138,7 @@ public partial class App : Application
     private void SetupClipboard()
     {
         _toast = new Toast();
+        _clipboard.LoadHistory(); // P004/P012: Start() 전에 이전 히스토리 복원
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
             _toast?.ShowToast(item.IsImage ? "🖼 이미지" : item.IsPath ? item.PathName : item.Snippet));
@@ -147,12 +148,14 @@ public partial class App : Application
         _clipPopup.ClipDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
         _clipPopup.ClipPinToggled += item => Dispatcher.BeginInvoke(() => _clipboard.TogglePin(item));
         _clipPopup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
+        _clipPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
 
         _pathPopup = new PathPopup();
         _pathPopup.SetItems(_clipboard.Paths);
-        _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item)); // 전체 경로 붙여넣기
+        _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
         _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
-        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item)); // 로컬 경로/URL 열기
+        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
+        _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
     }
 
     private void SetupHotkey()
