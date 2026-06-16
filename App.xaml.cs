@@ -89,6 +89,7 @@ public partial class App : Application
     {
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add("설정", null, (_, _) => Dispatcher.BeginInvoke(OpenSettings));
+        menu.Items.Add("저장 폴더 열기", null, (_, _) => OpenSaveFolder());
         menu.Items.Add("종료", null, (_, _) => ExitApp());
         _tray = new WinForms.NotifyIcon
         {
@@ -148,6 +149,7 @@ public partial class App : Application
         _clipPopup.ClipDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
         _clipPopup.ClipPinToggled += item => Dispatcher.BeginInvoke(() => _clipboard.TogglePin(item));
         _clipPopup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
+        _clipPopup.ClipOpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
         _clipPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
 
         _pathPopup = new PathPopup();
@@ -372,6 +374,31 @@ public partial class App : Application
             return b;
         }
         catch { return null; }
+    }
+
+    /// <summary>클립 카드의 저장된 본문 파일 위치를 탐색기로 연다. 파일이 있으면 그 파일을 선택, 없으면 저장 폴더만.</summary>
+    private void OnClipOpen(ClipItem item)
+    {
+        HideOverlay(force: true);
+        try
+        {
+            if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.FilePath}\"") { UseShellExecute = true });
+            else
+                OpenSaveFolder(); // 저장 전이거나 파일이 사라진 경우 폴더만 연다
+        }
+        catch { _toast?.ShowToast("열 수 없음"); }
+    }
+
+    /// <summary>클립 본문(이미지 PNG·텍스트 TXT) 저장 폴더를 탐색기로 연다. 없으면 먼저 생성.</summary>
+    private void OpenSaveFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(ClipboardService.SaveDir);
+            Process.Start(new ProcessStartInfo(ClipboardService.SaveDir) { UseShellExecute = true });
+        }
+        catch { _toast?.ShowToast("폴더를 열 수 없음"); }
     }
 
     // ── 설정 ──

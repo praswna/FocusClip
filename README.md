@@ -14,7 +14,7 @@ C# / .NET 8 / WPF로 작성되었으며 단일 EXE로 배포된다(.NET 8 Runtim
 | **텍스트 편집기** | 클립 텍스트를 편집 후 재붙여넣기 |
 | **이미지 어노테이션** | 클립 이미지에 텍스트/도형 주석 추가 후 저장 |
 | **토스트 알림** | 새 클립 캡처 시, 드래그 드롭 실패 시 우하단 알림 |
-| **시스템 트레이** | 트레이 상주, 우클릭 메뉴로 설정/종료 |
+| **시스템 트레이** | 트레이 상주, 우클릭 메뉴로 설정/저장 폴더 열기/종료 |
 | **자동 시작** | 설정에서 Windows 시작 시 자동 실행 등록/해제 |
 
 ## 단축키
@@ -30,15 +30,24 @@ C# / .NET 8 / WPF로 작성되었으며 단일 EXE로 배포된다(.NET 8 Runtim
 
 ## 빌드 및 실행
 
+개발 실행:
+
 ```
-dotnet build -c Release
 dotnet run
 ```
 
-단일 EXE 배포:
+단일 EXE 배포 — `build.bat` 실행(권장). 실행 중인 인스턴스 종료 → 정리 → publish 후
+중간 산출물(bin/obj)까지 지워 **`publish\FocusClip.exe` 하나만** 남긴다.
 
 ```
-dotnet publish FocusClip.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:PublishReadyToRun=true -o publish
+build.bat
+```
+
+배포 옵션(런타임 의존 단일 EXE, win-x64, ReadyToRun)은 `FocusClip.csproj`에 정의돼 있어
+수동 빌드도 동일하게 동작한다:
+
+```
+dotnet publish -c Release -o publish
 ```
 
 출력: `publish\FocusClip.exe` (.NET 8 Runtime 필요)
@@ -50,11 +59,14 @@ dotnet publish FocusClip.csproj -c Release -r win-x64 --self-contained false -p:
 
 ## 설정 파일
 
+모든 앱 데이터는 `%LOCALAPPDATA%\FocusClip\` 한 폴더 아래에 모여 있다(OneDrive·로밍 비대상 로컬 전용 → 드래그·열기 지연 없음). 구버전 `%APPDATA%\FocusClip` 데이터는 첫 실행 시 자동 이전된다.
+
 | 파일 | 내용 |
 |------|------|
-| `%APPDATA%\FocusClip\config.json` | 앱 목록·단축키 설정. 직접 편집하거나 설정 창으로 관리 |
-| `%APPDATA%\FocusClip\clips.json` | 클립보드 히스토리(텍스트/경로/이미지 참조). 재시작 후에도 유지 |
-| `%MyPictures%\ClipboardSaver\` | 이미지 클립 PNG 파일 저장 위치 |
+| `%LOCALAPPDATA%\FocusClip\config.json` | 앱 목록·단축키 설정. 직접 편집하거나 설정 창으로 관리 |
+| `%LOCALAPPDATA%\FocusClip\clips.json` | 클립보드 히스토리 메타데이터(해시/핀/시각 + 본문 파일 경로). 재시작 후에도 유지 |
+| `%LOCALAPPDATA%\FocusClip\media\` | 클립 본문 저장 위치 — 이미지는 PNG, 텍스트/경로는 TXT 파일. 트레이 우클릭 → "저장 폴더 열기"로 바로 접근 |
+| `%LOCALAPPDATA%\FocusClip\icons\` | 런처 앱 아이콘 PNG 캐시 |
 
 ## 프로젝트 구조
 

@@ -24,11 +24,11 @@ namespace FocusClip.Services;
 public sealed class ClipboardService : IDisposable
 {
     public const int MaxItems = 30;
-    public static string SaveDir { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "ClipboardSaver");
-    private static readonly string HistoryPath =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                     "FocusClip", "clips.json");
+    // 모든 앱 데이터는 ConfigService.Dir(=%LOCALAPPDATA%\FocusClip) 한 곳에 모은다.
+    // 클립 본문은 용량이 크고 자주 생성·삭제되므로 OneDrive·로밍 비대상인 Local 에 둬야
+    // 디하이드레이트(클라우드 전용)로 드래그/열기가 느려지지 않는다.
+    public static string SaveDir { get; } = Path.Combine(ConfigService.Dir, "media");
+    private static readonly string HistoryPath = Path.Combine(ConfigService.Dir, "clips.json");
 
     public ObservableCollection<ClipItem> Items { get; } = new();
 
@@ -133,7 +133,8 @@ public sealed class ClipboardService : IDisposable
         string key = NormalizePathKey(path);
         string hash = "path:" + Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(key)));
         if (Dedup(Paths, hash)) return;
-        Insert(Paths, new ClipItem { IsPath = true, Text = path, Hash = hash });
+        string? file = TrySaveTextFile(path);
+        Insert(Paths, new ClipItem { IsPath = true, Text = path, Hash = hash, FilePath = file });
     }
 
     /// <summary>dedup용 경로 정규화. 로컬은 슬래시 통일+소문자, URL은 후행 슬래시만 정리.</summary>
@@ -148,7 +149,22 @@ public sealed class ClipboardService : IDisposable
     {
         string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
         if (Dedup(Items, hash)) return;
-        Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash });
+        string? file = TrySaveTextFile(text);
+        Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash, FilePath = file });
+    }
+
+    /// <summary>텍스트/경로 클립을 SaveDir에 .txt 파일로 저장(이미지 PNG와 같은 폴더). 실패 시 null(인메모리 Text로만 유지).</summary>
+    private static string? TrySaveTextFile(string text)
+    {
+        try
+        {
+            Directory.CreateDirectory(SaveDir);
+            string name = $"clip_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid().ToString("N")[..6]}.txt";
+            string path = Path.Combine(SaveDir, name);
+            File.WriteAllText(path, text);
+            return path;
+        }
+        catch { return null; }
     }
 
     private void AddImage(BitmapSource img)
@@ -217,7 +233,12 @@ public sealed class ClipboardService : IDisposable
             for (int i = col.Count - 1; i >= 0; i--)
                 if (!col[i].Pinned) { idx = i; break; }
             if (idx < 0) break; // 전부 핀이면 제거하지 않음
+            var evicted = col[idx];
             col.RemoveAt(idx);
+            // 밀려난 항목의 본문 파일도 삭제(media 폴더 무한 증가 방지). 저장 중이면 Removed 표식으로 고아 정리.
+            evicted.Removed = true;
+            try { if (!string.IsNullOrEmpty(evicted.FilePath) && File.Exists(evicted.FilePath)) File.Delete(evicted.FilePath); }
+            catch { }
         }
         try { ItemAdded?.Invoke(item); } catch { }
         ScheduleSave();
@@ -248,8 +269,11 @@ public sealed class ClipboardService : IDisposable
     public void ReplaceText(ClipItem item, string newText)
     {
         if (item.IsImage) return;
+        try { if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath)) File.Delete(item.FilePath); }
+        catch { }
         item.Text = newText; // Snippet 알림 포함
         item.Hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(newText)));
+        item.FilePath = TrySaveTextFile(newText);
         try { MarkInternalCopy(); Clipboard.SetText(newText); } catch { }
     }
 
@@ -277,7 +301,8 @@ public sealed class ClipboardService : IDisposable
     public void AddEditedText(string text)
     {
         string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
-        Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash });
+        string? file = TrySaveTextFile(text);
+        Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash, FilePath = file });
         try { MarkInternalCopy(); Clipboard.SetText(text); } catch { }
     }
 
@@ -379,17 +404,35 @@ public sealed class ClipboardService : IDisposable
                 }
                 else
                 {
-                    if (string.IsNullOrEmpty(r.Text)) continue;
-                    Items.Add(new ClipItem { Text = r.Text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time });
+                    string text = ReadTextRecord(r);
+                    if (string.IsNullOrEmpty(text)) continue;
+                    Items.Add(new ClipItem { Text = text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time, FilePath = r.FilePath });
                 }
             }
             foreach (var r in store.Paths ?? [])
             {
-                if (string.IsNullOrEmpty(r.Text)) continue;
-                Paths.Add(new ClipItem { IsPath = true, Text = r.Text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time });
+                string text = ReadTextRecord(r);
+                if (string.IsNullOrEmpty(text)) continue;
+                Paths.Add(new ClipItem { IsPath = true, Text = text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time, FilePath = r.FilePath });
             }
         }
         catch { }
+    }
+
+    /// <summary>.txt 파일이 있으면 clips.json에는 본문을 중복 저장하지 않음(""). 파일 저장이
+    /// 실패해 FilePath가 없는 경우에만 손실 방지를 위해 Text를 그대로 직렬화.</summary>
+    private static string TextForJson(ClipItem x)
+        => string.IsNullOrEmpty(x.FilePath) ? (x.Text ?? "") : "";
+
+    /// <summary>텍스트/경로 레코드의 본문을 읽는다. .txt 파일이 있으면 그쪽을 우선(파일이 정본),
+    /// 없으면 옛 형식(clips.json에 직접 저장된 Text) 호환을 위해 r.Text로 폴백.</summary>
+    private static string ReadTextRecord(ClipRecord r)
+    {
+        if (!string.IsNullOrEmpty(r.FilePath) && File.Exists(r.FilePath))
+        {
+            try { return File.ReadAllText(r.FilePath); } catch { }
+        }
+        return r.Text;
     }
 
     // Insert/Remove/TogglePin 후 300ms 디바운스로 저장(연속 변경 시 파일 쓰기 최소화).
@@ -412,8 +455,8 @@ public sealed class ClipboardService : IDisposable
             // 컬렉션 접근은 UI 스레드에서, 파일 쓰기는 백그라운드로 분리.
             // File.WriteAllText 가 Dropbox 등 외부 잠금으로 블로킹되어도 UI가 멈추지 않는다.
             var store = new ClipStore(
-                Items.Select(x => new ClipRecord(x.IsImage, x.Text ?? "", x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
-                Paths.Select(x => new ClipRecord(false, x.Text ?? "", null, x.Hash, x.Pinned, x.Time)).ToList());
+                Items.Select(x => new ClipRecord(x.IsImage, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
+                Paths.Select(x => new ClipRecord(false, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList());
             string json = JsonSerializer.Serialize(store);
             Task.Run(() =>
             {
@@ -451,8 +494,8 @@ public sealed class ClipboardService : IDisposable
         try
         {
             var store = new ClipStore(
-                Items.Select(x => new ClipRecord(x.IsImage, x.Text ?? "", x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
-                Paths.Select(x => new ClipRecord(false, x.Text ?? "", null, x.Hash, x.Pinned, x.Time)).ToList());
+                Items.Select(x => new ClipRecord(x.IsImage, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
+                Paths.Select(x => new ClipRecord(false, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList());
             Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
             File.WriteAllText(HistoryPath, JsonSerializer.Serialize(store));
         }

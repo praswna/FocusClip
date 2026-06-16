@@ -22,6 +22,7 @@ public partial class ClipboardPopup : Window
     public event Action<ClipItem>? ClipDeleteRequested;
     public event Action<ClipItem>? ClipPinToggled;   // C2: 카드 핀 토글
     public event Action<ClipItem>? ClipEditRequested; // C4/C5: 카드 우클릭 편집
+    public event Action<ClipItem>? ClipOpenRequested; // 저장된 본문 파일 위치 열기
     public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>C1: 팝업 핀(자동 닫힘 해제). true면 앱 활성화/클립 선택에도 닫지 않음.</summary>
@@ -87,10 +88,8 @@ public partial class ClipboardPopup : Window
             DataObject data;
             if (item.IsImage)
             {
-                // 저장된 PNG 파일이 있으면 파일 드롭만 제공한다.
-                // SetImage 는 원본 비트맵을 드래그 중 DIB(CF_DIB)로 동기 직렬화하므로
-                // 큰 캡처일수록 매우 느리다. 대상(탐색기·편집기·채팅 등)은 파일 드롭이면
-                // 충분하므로, 비트맵은 파일이 아직 저장되지 않은 경우의 폴백으로만 첨부한다.
+                // 저장된 PNG 파일을 그대로 파일 드롭으로 넘긴다 — 우리 쪽 복사·인코딩 없음(드래그 즉시 시작).
+                // Copy 만 허용하므로 원본은 이동되지 않는다. 파일이 아직 없으면(방금 캡처) 비트맵 폴백.
                 data = new DataObject();
                 if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
                     data.SetFileDropList(new StringCollection { item.FilePath });
@@ -102,8 +101,7 @@ public partial class ClipboardPopup : Window
                 // SetText 로 CF_TEXT(ANSI 변환 포함)+CF_UNICODETEXT 등록 → 주소창 등 다양한 대상 호환.
                 data = PathPopup.BuildTextData(item.Text);
             }
-            // Esc 취소는 DragFailed 로 보지 않는다.
-            bool cancelled = false;
+            bool cancelled = false; // Esc 취소는 DragFailed 로 보지 않는다.
             QueryContinueDragEventHandler qcd = (_, qe) => { if (qe.EscapePressed) cancelled = true; };
             var src = (UIElement)sender;
             src.QueryContinueDrag += qcd;
@@ -152,6 +150,13 @@ public partial class ClipboardPopup : Window
         e.Handled = true;
         if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
             ClipPinToggled?.Invoke(item);
+    }
+
+    private void Open_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; // 카드 선택(복사)으로 전파 방지
+        if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
+            ClipOpenRequested?.Invoke(item);
     }
 
     private void PinToggle_Changed(object sender, RoutedEventArgs e)
