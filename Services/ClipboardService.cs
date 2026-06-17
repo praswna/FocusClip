@@ -23,7 +23,7 @@ namespace FocusClip.Services;
 /// </summary>
 public sealed class ClipboardService : IDisposable
 {
-    public const int MaxItems = 30;
+    public const int MaxItems = 20;
     // 모든 앱 데이터는 ConfigService.Dir(=%LOCALAPPDATA%\FocusClip) 한 곳에 모은다.
     // 클립 본문은 용량이 크고 자주 생성·삭제되므로 OneDrive·로밍 비대상인 Local 에 둬야
     // 디하이드레이트(클라우드 전용)로 드래그/열기가 느려지지 않는다.
@@ -133,8 +133,9 @@ public sealed class ClipboardService : IDisposable
         string key = NormalizePathKey(path);
         string hash = "path:" + Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(key)));
         if (Dedup(Paths, hash)) return;
-        string? file = TrySaveTextFile(path);
-        Insert(Paths, new ClipItem { IsPath = true, Text = path, Hash = hash, FilePath = file });
+        var item = new ClipItem { IsPath = true, Text = path, Hash = hash };
+        Insert(Paths, item);
+        SaveTextAsync(item, path); // 디스크 쓰기는 백그라운드(UI 비블로킹). Text는 메모리에 있어 즉시 사용 가능
     }
 
     /// <summary>dedup용 경로 정규화. 로컬은 슬래시 통일+소문자, URL은 후행 슬래시만 정리.</summary>
@@ -149,8 +150,20 @@ public sealed class ClipboardService : IDisposable
     {
         string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
         if (Dedup(Items, hash)) return;
-        string? file = TrySaveTextFile(text);
-        Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash, FilePath = file });
+        var item = new ClipItem { IsImage = false, Text = text, Hash = hash };
+        Insert(Items, item);
+        SaveTextAsync(item, text); // 디스크 쓰기는 백그라운드(UI 비블로킹). Text는 메모리에 있어 즉시 사용 가능
+    }
+
+    /// <summary>텍스트/경로 본문을 백그라운드로 .txt 저장하고 FilePath를 채운다(이미지의 SaveImageAsync와 동일 패턴 —
+    /// 캡처마다 UI 스레드에서 디스크 쓰기로 멈추지 않게). 저장 전에는 clips.json에 Text가 인라인 보존된다.</summary>
+    private static void SaveTextAsync(ClipItem item, string text)
+    {
+        Task.Run(() =>
+        {
+            string? path = TrySaveTextFile(text);
+            if (path != null) item.FilePath = path;
+        });
     }
 
     /// <summary>텍스트/경로 클립을 SaveDir에 .txt 파일로 저장(이미지 PNG와 같은 폴더). 실패 시 null(인메모리 Text로만 유지).</summary>
@@ -170,22 +183,33 @@ public sealed class ClipboardService : IDisposable
     private void AddImage(BitmapSource img)
     {
         if (!img.IsFrozen && img.CanFreeze) img.Freeze();
-        string hash = HashImage(img);
-        if (Dedup(Items, hash)) return;
-
-        // C7: 원본은 메모리에 즉시 보관(붙여넣기 가능) + PNG 저장은 백그라운드로.
-        var item = new ClipItem
+        // HashImage는 전체 픽셀을 스캔하므로 큰 캡처(4K)에서 UI를 멈칫하게 한다. 비트맵이 frozen이라
+        // 해시는 백그라운드에서 계산하고, dedup·Insert(컬렉션 변경)·저장만 UI 스레드로 마샬한다.
+        // 클립 처리는 150ms 디바운스로 직렬화되어, 백그라운드 해시 완료 전에 다음 캡처가 끼어들지 않으므로 순서가 유지된다.
+        Task.Run(() =>
         {
-            IsImage = true,
-            Hash = hash,
-            Thumb = MakeThumb(img),
-            FullImage = img,
-        };
-        Insert(Items, item);
-        SaveImageAsync(item, img);
+            string hash = HashImage(img);
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+            {
+                if (Dedup(Items, hash)) return;
+                // C7: 원본은 메모리에 즉시 보관(붙여넣기 가능) + PNG 저장은 백그라운드로.
+                var item = new ClipItem
+                {
+                    IsImage = true,
+                    Hash = hash,
+                    Thumb = MakeThumb(img),
+                    FullImage = img,
+                };
+                Insert(Items, item);
+                SaveImageAsync(item, img);
+            });
+        });
     }
 
-    /// <summary>이미지를 백그라운드로 저장. 저장 완료 시 이미 삭제된 항목이면 고아 파일을 정리한다.</summary>
+    /// <summary>이미지를 백그라운드로 저장하고 FilePath를 채운다. 저장이 끝나면 풀해상도(FullImage)를 해제하고
+    /// 썸네일을 파일 기반 독립 객체로 교체한다 — 캡처한 큰 이미지의 풀해상도가 세션 내내 RAM에 누적 상주하는 것을 막는다.
+    /// (저장 전에는 FullImage가 유일한 원본이라 붙여넣기에 필요하고, 저장 후에는 FilePath에서 온디맨드 로드로 대체된다.)
+    /// item.Removed 표식이 있으면 고아 파일을 정리하는 안전 경로가 있으나, 현재 삭제는 완전 수동이라 그 경로는 비활성.</summary>
     private static void SaveImageAsync(ClipItem item, BitmapSource img)
     {
         Task.Run(() =>
@@ -193,8 +217,16 @@ public sealed class ClipboardService : IDisposable
             try
             {
                 string path = SaveImage(img);
-                if (item.Removed) { try { File.Delete(path); } catch { } } // 저장 전에 삭제됨 → 고아 방지
-                else item.FilePath = path;
+                if (item.Removed) { try { File.Delete(path); } catch { } return; } // 안전 훅(현재 Removed는 설정되지 않음)
+                item.FilePath = path;
+                // 저장 완료 → 풀해상도 해제. 썸네일은 파일에서 축소 디코딩한 독립 객체로 교체(원본 미참조).
+                var thumb = LoadThumbFile(path, 240);
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    if (item.Removed) return;
+                    if (thumb != null) item.Thumb = thumb;
+                    item.FullImage = null;
+                });
             }
             catch { }
         });
@@ -226,19 +258,15 @@ public sealed class ClipboardService : IDisposable
     {
         // 새 항목은 핀 구간 바로 아래(비핀 최상단)에 넣는다.
         col.Insert(PinnedCountFront(col), item);
-        // 용량 초과 시 뒤에서부터 '비핀' 항목만 제거(핀 항목은 보호).
+        // 용량 초과 시 뒤에서부터 '비핀' 항목만 목록에서 제거(핀 항목은 보호).
+        // 본문 파일은 지우지 않는다 — media 폴더는 사용자가 직접 관리(수동 삭제). 팝업은 최근 N개만 보여주는 뷰.
         while (col.Count > MaxItems)
         {
             int idx = -1;
             for (int i = col.Count - 1; i >= 0; i--)
                 if (!col[i].Pinned) { idx = i; break; }
             if (idx < 0) break; // 전부 핀이면 제거하지 않음
-            var evicted = col[idx];
             col.RemoveAt(idx);
-            // 밀려난 항목의 본문 파일도 삭제(media 폴더 무한 증가 방지). 저장 중이면 Removed 표식으로 고아 정리.
-            evicted.Removed = true;
-            try { if (!string.IsNullOrEmpty(evicted.FilePath) && File.Exists(evicted.FilePath)) File.Delete(evicted.FilePath); }
-            catch { }
         }
         try { ItemAdded?.Invoke(item); } catch { }
         ScheduleSave();
@@ -322,13 +350,10 @@ public sealed class ClipboardService : IDisposable
         try { MarkInternalCopy(); Clipboard.SetImage(img); } catch { }
     }
 
-    /// <summary>클립 항목을 목록에서 제거하고 저장 파일도 삭제한다.</summary>
+    /// <summary>클립 항목을 목록에서만 제거한다. 본문 파일은 지우지 않는다 — media 폴더는 사용자가 직접 관리(완전 수동 삭제).</summary>
     public void Remove(ClipItem item)
     {
-        item.Removed = true; // 진행 중인 비동기 저장이 끝나면 파일을 정리하도록 표식
         if (!Items.Remove(item)) Paths.Remove(item); // 경로 항목은 Paths에 있음
-        try { if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath)) File.Delete(item.FilePath); }
-        catch { }
         ScheduleSave();
     }
 
@@ -336,10 +361,21 @@ public sealed class ClipboardService : IDisposable
     {
         try
         {
-            int stride = (bmp.PixelWidth * ((bmp.Format.BitsPerPixel + 7) / 8));
-            var bytes = new byte[stride * bmp.PixelHeight];
-            bmp.CopyPixels(bytes, stride, 0);
-            return Convert.ToHexString(MD5.HashData(bytes));
+            int stride = bmp.PixelWidth * ((bmp.Format.BitsPerPixel + 7) / 8);
+            int height = bmp.PixelHeight;
+            // 전체 픽셀을 한 번에 할당하면 큰 이미지에서 수십 MB가 LOH에 잡힌다(매 복사마다 GC 부담).
+            // 행을 작은 청크(<85KB, LOH 회피)로 나눠 CopyPixels → 증분 해싱한다. 행이 연속 배치되므로 결과 해시는 동일.
+            int rowsPerChunk = Math.Max(1, 81920 / Math.Max(1, stride));
+            var buf = new byte[rowsPerChunk * stride];
+            using var md5 = MD5.Create();
+            for (int y = 0; y < height; y += rowsPerChunk)
+            {
+                int rows = Math.Min(rowsPerChunk, height - y);
+                bmp.CopyPixels(new Int32Rect(0, y, bmp.PixelWidth, rows), buf, stride, 0);
+                md5.TransformBlock(buf, 0, rows * stride, null, 0);
+            }
+            md5.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            return Convert.ToHexString(md5.Hash!);
         }
         catch
         {
@@ -358,6 +394,8 @@ public sealed class ClipboardService : IDisposable
         return path;
     }
 
+    /// <summary>표시용 축소 썸네일. 반환되는 TransformedBitmap은 원본 bmp를 참조(메모리에 핀)하므로,
+    /// 캡처 이미지의 경우 저장 완료 후 SaveImageAsync가 파일 기반 독립 썸네일로 교체해 풀해상도를 해제한다.</summary>
     private static ImageSource MakeThumb(BitmapSource bmp, int maxW = 240)
     {
         double scale = Math.Min(1.0, (double)maxW / Math.Max(1, bmp.PixelWidth));
@@ -369,7 +407,7 @@ public sealed class ClipboardService : IDisposable
 
     // ── 영구 저장 (P004/P012) ──
 
-    /// <summary>시작 시 clips.json에서 이전 히스토리 복원. Start() 호출 전에 불러야 한다. 이미지 Thumb/FullImage는 UI 블로킹 방지를 위해 백그라운드에서 비동기 로드된다.</summary>
+    /// <summary>시작 시 clips.json에서 이전 히스토리 복원. Start() 호출 전에 불러야 한다. 이미지 썸네일은 UI 블로킹 방지를 위해 백그라운드에서 축소 디코딩으로 비동기 로드되며, 풀해상도는 상주시키지 않는다(붙여넣기/편집 시 FilePath에서 로드).</summary>
     public void LoadHistory()
     {
         if (!File.Exists(HistoryPath)) return;
@@ -384,22 +422,19 @@ public sealed class ClipboardService : IDisposable
                 if (r.IsImage)
                 {
                     if (string.IsNullOrEmpty(r.FilePath) || !File.Exists(r.FilePath)) continue;
-                    // 항목을 먼저 추가하고 Thumb/FullImage는 백그라운드 로드 — 큰 PNG를 UI 스레드에서
-                    // 동기 디코딩하면 30개 기준 수 초간 UI 가 멈춘다.
+                    // 항목을 먼저 추가하고 썸네일은 백그라운드 로드 — 큰 PNG를 UI 스레드에서
+                    // 동기 디코딩하면 보관 개수(최대 20개)만큼 누적돼 수 초간 UI 가 멈춘다.
+                    // FullImage(풀해상도)는 보관하지 않는다 — 붙여넣기/편집은 FilePath에서 온디맨드 로드하므로
+                    // 히스토리 이미지마다 풀해상도를 RAM에 상주시키는 메모리 낭비를 피한다.
                     var item = new ClipItem { IsImage = true, Hash = r.Hash, FilePath = r.FilePath,
                         Pinned = r.Pinned, Time = r.Time };
                     Items.Add(item);
                     var path = r.FilePath;
                     Task.Run(() =>
                     {
-                        var img = LoadBitmapFile(path);
-                        if (img == null) return;
-                        var thumb = MakeThumb(img);
-                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
-                        {
-                            item.FullImage = img;
-                            item.Thumb = thumb;
-                        });
+                        var thumb = LoadThumbFile(path, 240);
+                        if (thumb == null) return;
+                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => item.Thumb = thumb);
                     });
                 }
                 else
@@ -452,25 +487,33 @@ public sealed class ClipboardService : IDisposable
     {
         try
         {
-            // 컬렉션 접근은 UI 스레드에서, 파일 쓰기는 백그라운드로 분리.
-            // File.WriteAllText 가 Dropbox 등 외부 잠금으로 블로킹되어도 UI가 멈추지 않는다.
+            // 컬렉션 접근은 UI 스레드에서, 파일 쓰기(WriteHistoryAtomic: 임시파일+교체)는 백그라운드 Task로 분리.
+            // 디스크 I/O 지연(잠금·플러시 등)이 있어도 UI가 멈추지 않는다.
             var store = new ClipStore(
                 Items.Select(x => new ClipRecord(x.IsImage, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
                 Paths.Select(x => new ClipRecord(false, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList());
             string json = JsonSerializer.Serialize(store);
             Task.Run(() =>
             {
-                try
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
-                    File.WriteAllText(HistoryPath, json);
-                }
+                try { WriteHistoryAtomic(json); }
                 catch { }
             });
         }
         catch { }
     }
 
+    /// <summary>clips.json을 원자적으로 저장. 임시 파일에 쓴 뒤 교체(MoveFileEx replace)하므로,
+    /// 쓰는 도중 크래시/전원차단으로 본 파일이 잘려 다음 시작 시 히스토리 전체가 소실되는 일을 막는다.</summary>
+    private static void WriteHistoryAtomic(string json)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
+        string tmp = HistoryPath + ".tmp";
+        File.WriteAllText(tmp, json);
+        File.Move(tmp, HistoryPath, true); // 같은 볼륨 → 원자적 교체(부분 쓰기로 인한 손상 방지)
+    }
+
+    /// <summary>(현재 미사용) 파일에서 풀해상도 비트맵 로드. LoadHistory가 LoadThumbFile(축소 디코딩)로 전환된 뒤
+    /// 호출처가 없으며, 풀해상도 온디맨드 로드가 다시 필요할 때를 위한 헬퍼로 남겨 둔다. (붙여넣기/편집은 App.LoadImage 사용.)</summary>
     private static BitmapSource? LoadBitmapFile(string path)
     {
         try
@@ -478,6 +521,24 @@ public sealed class ClipboardService : IDisposable
             var b = new BitmapImage();
             b.BeginInit();
             b.CacheOption = BitmapCacheOption.OnLoad;
+            b.UriSource = new Uri(path);
+            b.EndInit();
+            b.Freeze();
+            return b;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>파일에서 축소 디코딩(DecodePixelWidth)으로 썸네일만 읽는다. 풀해상도를 메모리에 올리지 않아
+    /// 히스토리 이미지가 많아도 메모리를 적게 쓴다. 디코딩 결과는 원본 비트맵을 참조하지 않는 독립 객체.</summary>
+    private static BitmapSource? LoadThumbFile(string path, int maxW)
+    {
+        try
+        {
+            var b = new BitmapImage();
+            b.BeginInit();
+            b.CacheOption = BitmapCacheOption.OnLoad;
+            b.DecodePixelWidth = maxW; // 큰 PNG도 maxW 폭으로만 디코딩(원본보다 작으면 약간 확대되지만 표시에는 무해)
             b.UriSource = new Uri(path);
             b.EndInit();
             b.Freeze();
@@ -496,8 +557,7 @@ public sealed class ClipboardService : IDisposable
             var store = new ClipStore(
                 Items.Select(x => new ClipRecord(x.IsImage, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
                 Paths.Select(x => new ClipRecord(false, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList());
-            Directory.CreateDirectory(Path.GetDirectoryName(HistoryPath)!);
-            File.WriteAllText(HistoryPath, JsonSerializer.Serialize(store));
+            WriteHistoryAtomic(JsonSerializer.Serialize(store));
         }
         catch { }
         if (_src != null)

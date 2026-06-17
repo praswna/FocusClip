@@ -153,6 +153,10 @@
                     <RadioButton x:Name="FilterImage" Style="{StaticResource SegBtn}" GroupName="ClipFilter"
                                  Content="이미지" Checked="Filter_Image_Checked"/>
                 </StackPanel>
+                <TextBlock x:Name="FolderCount" HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Margin="0,0,24,0" FontSize="10" Foreground="{StaticResource GrayBrush}"
+                           Cursor="Hand" ToolTip="저장 폴더의 파일 수 (클릭 = 폴더 열기)"
+                           MouseLeftButtonUp="FolderCount_Click"/>
                 <ToggleButton x:Name="PinToggle" HorizontalAlignment="Right" VerticalAlignment="Center"
                               Width="20" Height="18" Cursor="Hand" ToolTip="팝업 고정(자동 닫힘 해제)"
                               Checked="PinToggle_Changed" Unchecked="PinToggle_Changed">

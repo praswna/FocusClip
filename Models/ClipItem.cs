@@ -30,7 +30,8 @@ public class ClipItem : INotifyPropertyChanged
         set { _thumb = value; OnPropertyChanged(); }
     }
 
-    /// <summary>원본 이미지(메모리). 비동기 저장 전/후 붙여넣기·편집에 사용.</summary>
+    /// <summary>원본 이미지(메모리). 파일 저장 전까지만 보관해 붙여넣기에 쓰고, 저장 완료 후에는 해제(null)되어
+    /// 붙여넣기·편집은 FilePath에서 온디맨드 로드한다. 히스토리에서 복원된 이미지는 처음부터 null.</summary>
     public BitmapSource? FullImage { get; set; }
 
     private bool _pinned;
@@ -43,7 +44,8 @@ public class ClipItem : INotifyPropertyChanged
     public DateTime Time { get; set; } = DateTime.Now;
     public string Hash { get; set; } = "";
 
-    /// <summary>목록에서 제거됨 표식. 비동기 이미지 저장이 끝났을 때 고아 파일을 정리하기 위함.</summary>
+    /// <summary>비동기 이미지 저장 완료 시 고아 파일을 정리하기 위한 표식. 단, 현재는 본문 삭제가
+    /// 완전 수동(파일 보존)이라 어디서도 true로 설정하지 않으며, 안전 훅으로만 남겨 둔다.</summary>
     public volatile bool Removed;
 
     public string TimeLabel => Time.ToString("HH:mm:ss");

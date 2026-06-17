@@ -55,15 +55,22 @@ public sealed class IconService
 
         try
         {
-            foreach (var p in Process.GetProcessesByName(nameNoExe))
+            // GetProcessesByName()가 돌려준 Process 객체(핸들 보유)는 조기 return 여부와 무관하게
+            // finally에서 전부 Dispose 해 핸들 누적을 막는다.
+            var procs = Process.GetProcessesByName(nameNoExe);
+            try
             {
-                try
+                foreach (var p in procs)
                 {
-                    string? path = p.MainModule?.FileName;
-                    if (!string.IsNullOrEmpty(path) && File.Exists(path)) { app.ExePath = path; return path; }
+                    try
+                    {
+                        string? path = p.MainModule?.FileName;
+                        if (!string.IsNullOrEmpty(path) && File.Exists(path)) { app.ExePath = path; return path; }
+                    }
+                    catch { /* 권한/비트수 차이로 접근 불가 → 다음 프로세스 */ }
                 }
-                catch { /* 권한/비트수 차이로 접근 불가 → 다음 프로세스 */ }
             }
+            finally { foreach (var p in procs) p.Dispose(); }
         }
         catch { }
         return null;

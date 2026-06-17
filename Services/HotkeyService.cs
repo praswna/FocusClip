@@ -34,6 +34,8 @@ public sealed class HotkeyService : IDisposable
         _proc = HookCallback; // 델리게이트 GC 방지
     }
 
+    /// <summary>로우레벨 키보드 후크를 등록한다. 후크 등록(SetWindowsHookEx)이 실패하면
+    /// InvalidOperationException을 던지므로(일부 보안SW/세션 제한 환경) 호출부에서 처리해야 한다.</summary>
     public void Install()
     {
         if (_hookId != IntPtr.Zero) return;
