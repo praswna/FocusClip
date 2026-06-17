@@ -17,6 +17,7 @@ dotnet publish FocusClip.csproj -c Release -o publish
 if errorlevel 1 (
     echo.
     echo === BUILD FAILED ===
+    pause
     exit /b 1
 )
 
@@ -34,4 +35,7 @@ ie4uinit.exe -show
 
 echo === Launching FocusClip ===
 start "" "%~dp0publish\FocusClip.exe"
+
+echo.
+pause
 endlocal

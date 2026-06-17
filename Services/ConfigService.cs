@@ -49,30 +49,36 @@ public sealed class ConfigService
     }
 
     private static string ConfigPath => Path.Combine(Dir, "config.json");
+    private static string BakPath => Path.Combine(Dir, "config.bak"); // 마지막 '비어있지 않은' 정상 설정 백업
 
     public AppConfig Config { get; private set; } = new();
 
     public void Load()
     {
         Directory.CreateDirectory(Dir);
-        if (File.Exists(ConfigPath))
-        {
-            try
-            {
-                Config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath)) ?? new AppConfig();
-                return;
-            }
-            catch
-            {
-                // 손상 시 빈 설정으로 진행하되, 손상 파일을 덮어쓰지 않는다(수동 복구 여지 보존).
-                // 원자적 Save 도입으로 우리 쓰기로 인한 손상은 발생하지 않지만, 디스크 오류·외부 변조 대비.
-                Config = new AppConfig();
-                return;
-            }
-        }
-        // 첫 실행(파일 없음)만 빈 등록 목록으로 시작하고 저장(설정 UI에서 직접 등록).
+
+        // 1) 정상 config.json (유효 파싱이면 빈 목록이어도 사용자 의도로 존중).
+        if (TryLoadFrom(ConfigPath)) return;
+
+        // 2) config.json이 손상/없음 → 마지막 정상 백업(config.bak)에서 복구하고 config.json 재생성.
+        if (TryLoadFrom(BakPath)) { Save(); return; }
+
+        // 3) 둘 다 없음(첫 실행) → 빈 설정. 단, config.json이 '존재하지만 손상'이면 덮어쓰지 않는다(수동 복구 여지 보존).
         Config = new AppConfig();
-        Save();
+        if (!File.Exists(ConfigPath)) Save();
+    }
+
+    private bool TryLoadFrom(string path)
+    {
+        if (!File.Exists(path)) return false;
+        try
+        {
+            var c = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path));
+            if (c == null) return false;
+            Config = c;
+            return true;
+        }
+        catch { return false; }
     }
 
     public void Save()
@@ -81,13 +87,19 @@ public sealed class ConfigService
         {
             Directory.CreateDirectory(Dir);
             string json = JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true });
-            // 원자적 저장: 임시 파일에 쓴 뒤 교체. 쓰는 도중 크래시/강제종료로 config.json이 잘려
-            // 다음 실행에서 손상→빈 기본값으로 덮어써지며 등록 앱이 통째로 소실되는 것을 막는다.
-            string tmp = ConfigPath + ".tmp";
-            File.WriteAllText(tmp, json);
-            File.Move(tmp, ConfigPath, true);
+            WriteAtomic(ConfigPath, json);
+            // 비어있지 않은 설정만 백업으로 보존 — 사고로 빈 설정이 저장돼도 백업은 마지막 정상본을 유지해
+            // 다음 시작 시 복구할 수 있게 한다(반복적 앱 소실 방지).
+            if (Config.Apps.Count > 0) WriteAtomic(BakPath, json);
         }
         catch { }
     }
 
+    /// <summary>임시 파일에 쓴 뒤 교체. 쓰는 도중 크래시/강제종료로 파일이 잘려 손상되는 것을 막는다(원자적 저장).</summary>
+    private static void WriteAtomic(string path, string content)
+    {
+        string tmp = path + ".tmp";
+        File.WriteAllText(tmp, content);
+        File.Move(tmp, path, true);
+    }
 }

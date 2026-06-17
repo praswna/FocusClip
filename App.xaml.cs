@@ -201,7 +201,9 @@ public partial class App : Application
                 var img = _icons.GetIcon(app);
                 if (img != null) Dispatcher.Invoke(() => app.Icon = img);
             }
-            Dispatcher.Invoke(() => _configSvc.Save()); // self-heal 된 경로 저장
+            // self-heal 된 exe 경로 저장. 단, 앱이 0개면 저장하지 않는다 — 로드 실패로 비어있는 상태를
+            // 그대로 영속화해 정상 설정을 덮어쓰는 사고를 막는다(앱이 있을 때만 self-heal 의미가 있음).
+            if (apps.Length > 0) Dispatcher.Invoke(() => _configSvc.Save());
         });
     }
 
