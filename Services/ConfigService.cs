@@ -62,9 +62,15 @@ public sealed class ConfigService
                 Config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath)) ?? new AppConfig();
                 return;
             }
-            catch { /* 손상 시 기본값으로 진행 */ }
+            catch
+            {
+                // 손상 시 빈 설정으로 진행하되, 손상 파일을 덮어쓰지 않는다(수동 복구 여지 보존).
+                // 원자적 Save 도입으로 우리 쓰기로 인한 손상은 발생하지 않지만, 디스크 오류·외부 변조 대비.
+                Config = new AppConfig();
+                return;
+            }
         }
-        // 첫 실행은 빈 등록 목록으로 시작(설정 UI에서 직접 등록).
+        // 첫 실행(파일 없음)만 빈 등록 목록으로 시작하고 저장(설정 UI에서 직접 등록).
         Config = new AppConfig();
         Save();
     }
@@ -74,8 +80,12 @@ public sealed class ConfigService
         try
         {
             Directory.CreateDirectory(Dir);
-            File.WriteAllText(ConfigPath,
-                JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true }));
+            string json = JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true });
+            // 원자적 저장: 임시 파일에 쓴 뒤 교체. 쓰는 도중 크래시/강제종료로 config.json이 잘려
+            // 다음 실행에서 손상→빈 기본값으로 덮어써지며 등록 앱이 통째로 소실되는 것을 막는다.
+            string tmp = ConfigPath + ".tmp";
+            File.WriteAllText(tmp, json);
+            File.Move(tmp, ConfigPath, true);
         }
         catch { }
     }
