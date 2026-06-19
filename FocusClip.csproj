@@ -12,6 +12,14 @@
     <RootNamespace>FocusClip</RootNamespace>
     <ApplicationIcon>app_icon.ico</ApplicationIcon>
     <Version>0.1.0</Version>
+
+    <!-- 배포: 런타임 의존 단일 EXE(win-x64). 산출물은 publish\ 한 곳으로 모은다.
+         AppendRuntimeIdentifierToOutputPath=false → bin\...\win-x64\ 중첩 폴더 제거. -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>

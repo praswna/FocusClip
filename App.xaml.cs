@@ -26,6 +26,8 @@ public partial class App : Application
 {
     private Mutex? _mutex;
     private bool _ownsMutex;
+    private const string ShowEventName = "FocusClip_ShowDock";
+    private EventWaitHandle? _showEvent;
 
     private HotkeyService? _hotkey;
     private WinForms.NotifyIcon? _tray;
@@ -51,9 +53,18 @@ public partial class App : Application
         base.OnStartup(e);
 
         _mutex = new Mutex(true, "FocusClip_SingleInstance", out _ownsMutex);
-        if (!_ownsMutex) { _mutex.Dispose(); _mutex = null; Shutdown(); return; }
+        if (!_ownsMutex)
+        {
+            // 이미 실행 중 → 기존 인스턴스에 "도크 표시" 신호를 보내고 종료.
+            // (단일 인스턴스라 두 번째 실행이 조용히 사라지면 "안 떠요"로 보이므로 피드백을 준다.)
+            try { if (EventWaitHandle.TryOpenExisting(ShowEventName, out var ev)) { ev.Set(); ev.Dispose(); } } catch { }
+            _mutex.Dispose(); _mutex = null; Shutdown(); return;
+        }
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // 두 번째 실행이 보내는 신호를 받아 도크를 띄우는 대기 스레드.
+        StartShowSignalListener();
 
         _configSvc.Load();
 
@@ -71,7 +82,10 @@ public partial class App : Application
         SetupDock();
         SetupSidebar();
         SetupClipboard();
-        SetupHotkey();
+        // 후크 등록(SetWindowsHookEx)은 일부 보안SW/세션 제한 환경에서 실패하며 예외를 던진다.
+        // 잡지 않으면 시작 즉시 미처리 예외로 크래시하므로, 토스트로 알리고 트레이 상주는 유지한다.
+        try { SetupHotkey(); }
+        catch (Exception ex) { _toast?.ShowToast("단축키 등록 실패 — 트레이 메뉴로 종료/설정 가능"); System.Diagnostics.Debug.WriteLine(ex); }
 
         LoadIconsAsync();
 
@@ -89,6 +103,7 @@ public partial class App : Application
     {
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add("설정", null, (_, _) => Dispatcher.BeginInvoke(OpenSettings));
+        menu.Items.Add("저장 폴더 열기", null, (_, _) => OpenSaveFolder());
         menu.Items.Add("종료", null, (_, _) => ExitApp());
         _tray = new WinForms.NotifyIcon
         {
@@ -138,6 +153,7 @@ public partial class App : Application
     private void SetupClipboard()
     {
         _toast = new Toast();
+        _clipboard.LoadHistory(); // P004/P012: Start() 전에 이전 히스토리 복원
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
             _toast?.ShowToast(item.IsImage ? "🖼 이미지" : item.IsPath ? item.PathName : item.Snippet));
@@ -147,12 +163,16 @@ public partial class App : Application
         _clipPopup.ClipDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
         _clipPopup.ClipPinToggled += item => Dispatcher.BeginInvoke(() => _clipboard.TogglePin(item));
         _clipPopup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
+        _clipPopup.ClipOpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
+        _clipPopup.OpenFolderRequested += () => Dispatcher.BeginInvoke(OpenSaveFolder);
+        _clipPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
 
         _pathPopup = new PathPopup();
         _pathPopup.SetItems(_clipboard.Paths);
-        _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item)); // 전체 경로 붙여넣기
+        _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
         _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
-        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item)); // 로컬 경로/URL 열기
+        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
+        _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
     }
 
     private void SetupHotkey()
@@ -181,8 +201,32 @@ public partial class App : Application
                 var img = _icons.GetIcon(app);
                 if (img != null) Dispatcher.Invoke(() => app.Icon = img);
             }
-            Dispatcher.Invoke(() => _configSvc.Save()); // self-heal 된 경로 저장
+            // self-heal 된 exe 경로 저장. 단, 앱이 0개면 저장하지 않는다 — 로드 실패로 비어있는 상태를
+            // 그대로 영속화해 정상 설정을 덮어쓰는 사고를 막는다(앱이 있을 때만 self-heal 의미가 있음).
+            if (apps.Length > 0) Dispatcher.Invoke(() => _configSvc.Save());
         });
+    }
+
+    /// <summary>두 번째 실행이 보내는 신호(EventWaitHandle)를 백그라운드에서 대기하다가, 신호가 오면 도크를 띄운다.</summary>
+    private void StartShowSignalListener()
+    {
+        try { _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName); }
+        catch { return; }
+        var t = new Thread(() =>
+        {
+            while (true)
+            {
+                // WaitOne(이벤트 Dispose 시)·BeginInvoke(Dispatcher 종료 시) 모두 예외를 던질 수 있다.
+                // raw 스레드라 미처리 예외는 프로세스를 죽이므로, 루프 전체를 try로 감싸 안전 종료한다.
+                try
+                {
+                    if (!_showEvent.WaitOne()) break;
+                    Dispatcher.BeginInvoke(() => { if (!(_dock?.IsVisible ?? false)) ShowOverlay(); });
+                }
+                catch { break; }
+            }
+        }) { IsBackground = true, Name = "FocusClipShowSignal" };
+        t.Start();
     }
 
     // ── 오버레이(도크 + 클립 팝업) 토글 ──
@@ -195,7 +239,7 @@ public partial class App : Application
     private void ShowOverlay()
     {
         _prevForeground = NativeMethods.GetForegroundWindow(); // 붙여넣기 대상 기억
-        RefreshActiveStates();
+        RefreshActiveStates(); // 비동기 — 표시를 막지 않고, 활성 표시(IsActive)는 도크 표시 직후 한 틱 내 갱신
         _dock!.ShowAtCursor();
         if (_clipboard.Items.Count > 0) _clipPopup!.ShowAbove(_dock); // 클립이 있을 때만 도크 위에
         if (_clipboard.Paths.Count > 0) // 경로가 있을 때만 도크 아래에(클립 팝업과 겹치지 않게)
@@ -371,6 +415,31 @@ public partial class App : Application
         catch { return null; }
     }
 
+    /// <summary>클립 카드의 저장된 본문 파일 위치를 탐색기로 연다. 파일이 있으면 그 파일을 선택, 없으면 저장 폴더만.</summary>
+    private void OnClipOpen(ClipItem item)
+    {
+        HideOverlay(force: true);
+        try
+        {
+            if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
+                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.FilePath}\"") { UseShellExecute = true });
+            else
+                OpenSaveFolder(); // 저장 전이거나 파일이 사라진 경우 폴더만 연다
+        }
+        catch { _toast?.ShowToast("열 수 없음"); }
+    }
+
+    /// <summary>클립 본문(이미지 PNG·텍스트 TXT) 저장 폴더를 탐색기로 연다. 없으면 먼저 생성.</summary>
+    private void OpenSaveFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(ClipboardService.SaveDir);
+            Process.Start(new ProcessStartInfo(ClipboardService.SaveDir) { UseShellExecute = true });
+        }
+        catch { _toast?.ShowToast("폴더를 열 수 없음"); }
+    }
+
     // ── 설정 ──
     private void OpenSettings()
     {
@@ -396,21 +465,35 @@ public partial class App : Application
 
     private void RefreshActiveStates()
     {
-        HashSet<string> running;
-        try
+        // 시스템 전체 프로세스 열거(GetProcesses)는 1.5초마다 반복되는 무거운 작업이라 백그라운드에서 수행하고,
+        // IsActive(바인딩 속성) 갱신만 UI 스레드로 마샬한다 — UI 스레드의 주기적 멈춤을 없앤다.
+        // GetProcesses()가 돌려준 Process 객체(파이널라이저 대상)는 finally에서 즉시 Dispose.
+        Task.Run(() =>
         {
-            running = new HashSet<string>(
-                Process.GetProcesses().Select(p => { try { return p.ProcessName; } catch { return ""; } }),
-                StringComparer.OrdinalIgnoreCase);
-        }
-        catch { return; }
+            HashSet<string> running;
+            try
+            {
+                var procs = Process.GetProcesses();
+                try
+                {
+                    running = new HashSet<string>(
+                        procs.Select(p => { try { return p.ProcessName; } catch { return ""; } }),
+                        StringComparer.OrdinalIgnoreCase);
+                }
+                finally { foreach (var p in procs) p.Dispose(); }
+            }
+            catch { return; }
 
-        foreach (var app in _apps)
-        {
-            string n = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                ? app.ProcessName[..^4] : app.ProcessName;
-            app.IsActive = !string.IsNullOrEmpty(n) && running.Contains(n);
-        }
+            Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var app in _apps)
+                {
+                    string n = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                        ? app.ProcessName[..^4] : app.ProcessName;
+                    app.IsActive = !string.IsNullOrEmpty(n) && running.Contains(n);
+                }
+            });
+        });
     }
 
     private void ExitApp()
@@ -427,6 +510,7 @@ public partial class App : Application
         _clipboard.Dispose();
         if (_tray is not null) { _tray.Visible = false; _tray.Dispose(); }
         try { _configSvc.Save(); } catch { }
+        try { _showEvent?.Dispose(); } catch { }
         if (_mutex is not null && _ownsMutex)
         {
             try { _mutex.ReleaseMutex(); } catch { }

@@ -1,20 +1,20 @@
 # FocusClip
 
 FocusManager(AHK)와 Clipboard-Manager(PyQt6)를 단일 네이티브 앱으로 통합한 Windows 유틸리티.  
-C# / .NET 8 / WPF로 작성되었으며 외부 런타임 의존 없이 단일 EXE로 배포된다.
+C# / .NET 8 / WPF로 작성되었으며 단일 EXE로 배포된다(.NET 8 Runtime 필요).
 
 ## 주요 기능
 
 | 기능 | 설명 |
 |------|------|
 | **런처 도크** | CapsLock 누르면 등록 앱 목록 팝업. 숫자키(고정 개수만큼, 최대 1~9)로 즉시 전환 |
-| **클립보드 히스토리** | 텍스트/이미지 최대 30개 보관, 팝업에서 선택 후 자동 붙여넣기. 전체/텍스트/이미지 필터 |
-| **경로 팝업** | 복사된 파일 경로·URL을 별도 팝업에서 함축 표시. 클릭=경로 붙여넣기, ↗=로컬/URL 열기, 전체/로컬/URL 필터 |
+| **클립보드 히스토리** | 텍스트/이미지 최근 20개 표시(재시작 후에도 유지), 팝업에서 선택 후 자동 붙여넣기, 드래그앤드롭으로 다른 앱에 직접 드롭. 전체/텍스트/이미지 필터. 카드별 수정/고정/저장 위치 열기(📂)/삭제. 삭제(✕)는 목록에서만 제거하고 본문 파일은 폴더에 보존(완전 수동 정리), 헤더에 폴더 파일 수 표시(클릭=폴더 열기) |
+| **경로 팝업** | 복사된 파일 경로·URL을 별도 팝업에서 함축 표시. 클릭=경로 붙여넣기, 드래그=텍스트로 드롭, ↗=로컬/URL 열기, 전체/로컬/URL 필터 |
 | **항상 위 토글** | 사이드바에서 우클릭 → 대상 창을 TopMost 전환 |
 | **텍스트 편집기** | 클립 텍스트를 편집 후 재붙여넣기 |
 | **이미지 어노테이션** | 클립 이미지에 텍스트/도형 주석 추가 후 저장 |
-| **토스트 알림** | 새 클립 캡처 시 우하단 알림 |
-| **시스템 트레이** | 트레이 상주, 우클릭 메뉴로 설정/종료 |
+| **토스트 알림** | 새 클립 캡처 시, 드래그 드롭 실패 시 우하단 알림 |
+| **시스템 트레이** | 트레이 상주, 우클릭 메뉴로 설정/저장 폴더 열기/종료 |
 | **자동 시작** | 설정에서 Windows 시작 시 자동 실행 등록/해제 |
 
 ## 단축키
@@ -28,20 +28,32 @@ C# / .NET 8 / WPF로 작성되었으며 외부 런타임 의존 없이 단일 EX
 
 기본 단축키(CapsLock)는 설정 창에서 변경 가능.
 
+이미 실행 중일 때 EXE를 다시 실행하면 새 인스턴스가 뜨지 않고 런처 도크가 열린다(단일 인스턴스).
+
 ## 빌드 및 실행
 
+개발 실행:
+
 ```
-dotnet build -c Release
 dotnet run
 ```
 
-단일 EXE 배포:
+단일 EXE 배포 — `build.bat` 실행(권장). 실행 중인 인스턴스 종료 → 정리 → publish →
+중간 산출물(bin/obj)·pdb 삭제 → 아이콘 캐시 새로고침 → **앱 자동 실행**.
+결과는 **`publish\FocusClip.exe` 하나만** 남는다.
 
 ```
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+build.bat
 ```
 
-출력: `bin\Release\net8.0-windows\win-x64\publish\FocusClip.exe`
+배포 옵션(런타임 의존 단일 EXE, win-x64, ReadyToRun)은 `FocusClip.csproj`에 정의돼 있어
+수동 빌드도 동일하게 동작한다:
+
+```
+dotnet publish -c Release -o publish
+```
+
+출력: `publish\FocusClip.exe` (.NET 8 Runtime 필요)
 
 ## 요구 사항
 
@@ -50,7 +62,14 @@ dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=
 
 ## 설정 파일
 
-`%APPDATA%\FocusClip\config.json`에 앱 목록·단축키 설정이 저장된다. 직접 편집하거나 설정 창을 통해 관리한다.
+모든 앱 데이터는 `%LOCALAPPDATA%\FocusClip\` 한 폴더 아래에 모여 있다(OneDrive·로밍 비대상 로컬 전용 → 드래그·열기 지연 없음). 구버전 `%APPDATA%\FocusClip` 데이터는 첫 실행 시 자동 이전된다.
+
+| 파일 | 내용 |
+|------|------|
+| `%LOCALAPPDATA%\FocusClip\config.json` | 앱 목록·단축키 설정. 직접 편집하거나 설정 창으로 관리 |
+| `%LOCALAPPDATA%\FocusClip\clips.json` | 클립보드 히스토리 메타데이터(해시/핀/시각 + 본문 파일 경로). 재시작 후에도 유지 |
+| `%LOCALAPPDATA%\FocusClip\media\` | 클립 본문 저장 위치 — 이미지는 PNG, 텍스트/경로는 TXT 파일. 트레이 우클릭 → "저장 폴더 열기"로 바로 접근 |
+| `%LOCALAPPDATA%\FocusClip\icons\` | 런처 앱 아이콘 PNG 캐시 |
 
 ## 프로젝트 구조
 

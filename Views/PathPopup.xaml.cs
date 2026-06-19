@@ -2,20 +2,23 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using FocusClip.Interop;
 using FocusClip.Models;
 
 namespace FocusClip.Views;
 
-/// <summary>복사된 파일 경로 전용 팝업. 함축 표시(이름+축약 경로), 클릭 시 전체 경로 붙여넣기.</summary>
+/// <summary>복사된 파일 경로 전용 팝업. 함축 표시(이름+축약 경로), 클릭 시 전체 경로 붙여넣기, 드래그 시 텍스트로 드롭.</summary>
 public partial class PathPopup : Window
 {
     public event Action<ClipItem>? PathSelected;
     public event Action<ClipItem>? PathDeleteRequested;
     public event Action<ClipItem>? PathOpenRequested; // 로컬 경로/URL 열기
+    public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>팝업 핀(자동 닫힘 해제). true면 외부 클릭/앱 활성화에도 닫지 않음.</summary>
     public bool Pinned { get; private set; }
@@ -55,8 +58,67 @@ public partial class PathPopup : Window
     private void PinToggle_Changed(object sender, RoutedEventArgs e)
         => Pinned = PinToggle.IsChecked == true;
 
+    // ── 카드 드래그: 경로 항목을 OS 드래그로 끌어내 탐색기·에디터 등에 드롭 ──
+    private Point _cardDragStart;
+    private ClipItem? _cardDragItem;
+    private bool _cardDragHappened;
+
+    private void Card_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _cardDragHappened = false;
+        if (IsFromButton(e.OriginalSource)) { _cardDragItem = null; return; }
+        _cardDragStart = e.GetPosition(null);
+        _cardDragItem = (sender as FrameworkElement)?.Tag as ClipItem;
+    }
+
+    private void Card_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_cardDragItem == null || e.LeftButton != MouseButtonState.Pressed) return;
+        var p = e.GetPosition(null);
+        if (Math.Abs(p.X - _cardDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(p.Y - _cardDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        var item = _cardDragItem;
+        _cardDragItem = null;
+        _cardDragHappened = true;
+        try
+        {
+            var data = BuildTextData(item.Text);
+            bool cancelled = false;
+            QueryContinueDragEventHandler qcd = (_, qe) => { if (qe.EscapePressed) cancelled = true; };
+            var src = (UIElement)sender;
+            src.QueryContinueDrag += qcd;
+            var effect = DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
+            src.QueryContinueDrag -= qcd;
+            if (effect == DragDropEffects.None && !cancelled) DragFailed?.Invoke();
+        }
+        catch { }
+    }
+
+    // SetData(DataFormats.Text, ...) 대신 SetText 를 써야 한다.
+    // SetData 는 ANSI 변환 없이 raw 유니코드 바이트를 CF_TEXT 에 넣어 한글이 한자로 깨짐.
+    internal static DataObject BuildTextData(string text)
+    {
+        var data = new DataObject();
+        data.SetText(text); // CF_TEXT(ANSI 변환) + CF_UNICODETEXT 양쪽 등록
+        return data;
+    }
+
+    private static bool IsFromButton(object src)
+    {
+        var d = src as DependencyObject;
+        while (d != null)
+        {
+            if (d is Button) return true;
+            d = (d is Visual or System.Windows.Media.Media3D.Visual3D)
+                ? VisualTreeHelper.GetParent(d) : LogicalTreeHelper.GetParent(d);
+        }
+        return false;
+    }
+
     private void Card_Click(object sender, MouseButtonEventArgs e)
     {
+        if (_cardDragHappened) { _cardDragHappened = false; return; }
         if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
             PathSelected?.Invoke(item);
     }

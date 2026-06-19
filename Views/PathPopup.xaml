@@ -136,6 +136,8 @@
                         <DataTemplate>
                             <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
                                     Background="{StaticResource Bg2Brush}"
+                                    PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="Card_PreviewMouseMove"
                                     MouseLeftButtonUp="Card_Click"
                                     Tag="{Binding}"
                                     ToolTip="{Binding Text}">

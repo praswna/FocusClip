@@ -37,11 +37,18 @@ public sealed class WindowManager
         if (string.IsNullOrEmpty(nameNoExe)) return IntPtr.Zero;
         try
         {
-            foreach (var p in Process.GetProcessesByName(nameNoExe))
+            // 앱 활성화/항상위 토글마다 호출되므로, GetProcessesByName()가 돌려준 Process 객체(핸들 보유)는
+            // 조기 return 여부와 무관하게 finally에서 전부 Dispose 해 핸들 누적을 막는다.
+            var procs = Process.GetProcessesByName(nameNoExe);
+            try
             {
-                IntPtr h = p.MainWindowHandle;
-                if (h != IntPtr.Zero) return h;
+                foreach (var p in procs)
+                {
+                    IntPtr h = p.MainWindowHandle;
+                    if (h != IntPtr.Zero) return h;
+                }
             }
+            finally { foreach (var p in procs) p.Dispose(); }
         }
         catch { }
         return IntPtr.Zero;
