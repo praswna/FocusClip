@@ -48,10 +48,18 @@
 
         <!-- 하단 버튼 -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource Bg2Brush}" Padding="6">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="저장" Click="Save_Click" Padding="16,4"/>
-                <Button Content="취소" Click="Cancel_Click" Padding="16,4"/>
-            </StackPanel>
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button x:Name="CropBtn" Content="✂ 자르기" Click="Crop_Click"/>
+                    <Button x:Name="CropApplyBtn" Content="✓ 적용" Click="CropApply_Click" IsEnabled="False"/>
+                    <TextBlock x:Name="CropHint" Foreground="{StaticResource GrayBrush}"
+                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="저장" Click="Save_Click" Padding="16,4"/>
+                    <Button Content="취소" Click="Cancel_Click" Padding="16,4"/>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <ScrollViewer x:Name="Scroller" Background="#FF1E1E1E"
@@ -66,6 +74,11 @@
                 </Grid.LayoutTransform>
                 <Image x:Name="BaseImage"/>
                 <InkCanvas x:Name="Ink" Background="Transparent"/>
+                <!-- 자르기 선택 영역(이미지 픽셀 좌표, Zoom과 함께 스케일) -->
+                <Rectangle x:Name="CropRect" Visibility="Collapsed" IsHitTestVisible="False"
+                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                           Stroke="{StaticResource AccentBrush}" StrokeThickness="2"
+                           StrokeDashArray="4 3" Fill="#3300FFFF"/>
             </Grid>
         </ScrollViewer>
     </DockPanel>

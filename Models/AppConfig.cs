@@ -21,6 +21,7 @@ public class AppConfig
     public bool SidebarEnabled { get; set; } = true; // 왼쪽 고정 사이드바 표시 여부(기본 ON)
     public string FileManagerPath { get; set; } = ""; // 폴더 열기에 쓸 파일 관리자 exe(예: Q-Dir). 비우면 기본 탐색기.
     public string FileManagerArgs { get; set; } = "\"%path%\""; // 파일 관리자 실행 인자 템플릿. %path%가 폴더 경로로 치환됨.
+    public bool MemoryOnly { get; set; } = true;  // 기본 켜짐(보안): 클립 본문·clips.json을 디스크에 저장하지 않고 메모리에만 보관. 끄면 디스크 저장·재시작 후 유지.
 
     // 아이콘 우클릭 동작(설정창에서 변경). 문자열로 직렬화해 enum 순서 변경에 강하게.
     [JsonConverter(typeof(JsonStringEnumConverter))]

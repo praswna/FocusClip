@@ -38,6 +38,10 @@ public sealed class ClipboardService : IDisposable
     /// <summary>복사된 파일 경로 항목(경로 전용 팝업에서 관리). 메인 Items와 분리.</summary>
     public ObservableCollection<ClipItem> Paths { get; } = new();
 
+    /// <summary>true면 클립 본문(.txt/.png)·clips.json을 디스크에 쓰지 않고 메모리에만 보관(보안 모드).
+    /// 시작 시 LoadHistory도 건너뛴다. 앱 종료 시 기록은 사라진다.</summary>
+    public bool MemoryOnly { get; set; }
+
     /// <summary>새 클립이 추가될 때 발생(토스트 알림용).</summary>
     public event Action<ClipItem>? ItemAdded;
 
@@ -138,7 +142,7 @@ public sealed class ClipboardService : IDisposable
         if (Dedup(Paths, hash)) return;
         var item = new ClipItem { IsPath = true, Text = path, Hash = hash };
         Insert(Paths, item);
-        SaveTextAsync(item, path); // 디스크 쓰기는 백그라운드(UI 비블로킹). Text는 메모리에 있어 즉시 사용 가능
+        if (!MemoryOnly) SaveTextAsync(item, path); // 메모리 모드면 디스크 미저장(Text는 메모리에 보관)
         RefreshPathExists(item);   // 존재 여부도 백그라운드에서 검사해 갱신
     }
 
@@ -172,7 +176,7 @@ public sealed class ClipboardService : IDisposable
         if (Dedup(Items, hash)) return;
         var item = new ClipItem { IsImage = false, Text = text, Hash = hash };
         Insert(Items, item);
-        SaveTextAsync(item, text); // 디스크 쓰기는 백그라운드(UI 비블로킹). Text는 메모리에 있어 즉시 사용 가능
+        if (!MemoryOnly) SaveTextAsync(item, text); // 메모리 모드면 디스크 미저장(Text는 메모리에 보관)
     }
 
     /// <summary>텍스트/경로 본문을 백그라운드로 .txt 저장하고 FilePath를 채운다(이미지의 SaveImageAsync와 동일 패턴 —
@@ -221,7 +225,7 @@ public sealed class ClipboardService : IDisposable
                     FullImage = img,
                 };
                 Insert(Items, item);
-                SaveImageAsync(item, img);
+                if (!MemoryOnly) SaveImageAsync(item, img); // 메모리 모드면 디스크 미저장(FullImage·썸네일 메모리 유지)
             });
         });
     }
@@ -323,7 +327,7 @@ public sealed class ClipboardService : IDisposable
         catch { }
         item.Text = newText; // Snippet 알림 포함
         item.Hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(newText)));
-        item.FilePath = TrySaveTextFile(newText);
+        item.FilePath = MemoryOnly ? null : TrySaveTextFile(newText);
         try { MarkInternalCopy(); Clipboard.SetText(newText); } catch { }
     }
 
@@ -338,7 +342,7 @@ public sealed class ClipboardService : IDisposable
         item.Thumb = MakeThumb(newImg);
         item.Hash = HashImage(newImg);
         item.FilePath = null;
-        Task.Run(() => { try { item.FilePath = SaveImage(newImg); } catch { } });
+        if (!MemoryOnly) Task.Run(() => { try { item.FilePath = SaveImage(newImg); } catch { } });
         try
         {
             MarkInternalCopy();
@@ -351,7 +355,7 @@ public sealed class ClipboardService : IDisposable
     public void AddEditedText(string text)
     {
         string hash = Convert.ToHexString(MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text)));
-        string? file = TrySaveTextFile(text);
+        string? file = MemoryOnly ? null : TrySaveTextFile(text);
         Insert(Items, new ClipItem { IsImage = false, Text = text, Hash = hash, FilePath = file });
         try { MarkInternalCopy(); Clipboard.SetText(text); } catch { }
     }
@@ -368,7 +372,7 @@ public sealed class ClipboardService : IDisposable
             FullImage = img,
         };
         Insert(Items, item);
-        SaveImageAsync(item, img);
+        if (!MemoryOnly) SaveImageAsync(item, img);
         try { MarkInternalCopy(); Clipboard.SetImage(img); } catch { }
     }
 
@@ -432,6 +436,7 @@ public sealed class ClipboardService : IDisposable
     /// <summary>시작 시 clips.json에서 이전 히스토리 복원. Start() 호출 전에 불러야 한다. 이미지 썸네일은 UI 블로킹 방지를 위해 백그라운드에서 축소 디코딩으로 비동기 로드되며, 풀해상도는 상주시키지 않는다(붙여넣기/편집 시 FilePath에서 로드).</summary>
     public void LoadHistory()
     {
+        if (MemoryOnly) return;        // 메모리 모드: 이전 기록을 불러오지 않음
         if (!File.Exists(HistoryPath)) return;
         try
         {
@@ -497,6 +502,7 @@ public sealed class ClipboardService : IDisposable
     // Insert/Remove/TogglePin 후 300ms 디바운스로 저장(연속 변경 시 파일 쓰기 최소화).
     private void ScheduleSave()
     {
+        if (MemoryOnly) return;        // 메모리 모드: clips.json 미저장
         if (_saveTimer == null)
         {
             _saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
@@ -575,15 +581,18 @@ public sealed class ClipboardService : IDisposable
     public void Dispose()
     {
         _saveTimer?.Stop();
-        // 종료 시에는 Task.Run 완료를 보장할 수 없으므로 동기 저장.
-        try
+        // 종료 시에는 Task.Run 완료를 보장할 수 없으므로 동기 저장. (메모리 모드면 디스크에 안 씀)
+        if (!MemoryOnly)
         {
-            var store = new ClipStore(
-                Items.Select(x => new ClipRecord(x.IsImage, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
-                Paths.Select(x => new ClipRecord(false, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList());
-            WriteHistoryAtomic(JsonSerializer.Serialize(store));
+            try
+            {
+                var store = new ClipStore(
+                    Items.Select(x => new ClipRecord(x.IsImage, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList(),
+                    Paths.Select(x => new ClipRecord(false, TextForJson(x), x.FilePath, x.Hash, x.Pinned, x.Time)).ToList());
+                WriteHistoryAtomic(JsonSerializer.Serialize(store));
+            }
+            catch { }
         }
-        catch { }
         if (_src != null)
         {
             try { NativeMethods.RemoveClipboardFormatListener(_src.Handle); } catch { }

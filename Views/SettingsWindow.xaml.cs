@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
     private readonly ObservableCollection<AppEntry> _registered;
     private readonly Action _onChanged;
     private readonly Action<int>? _onHotkeyChanged;
+    private readonly Action<bool>? _onMemoryOnlyChanged;
     private readonly ObservableCollection<AppEntry> _running = new();
     private bool _capturingHotkey;
     private bool _suppressPinned;
@@ -26,7 +27,7 @@ public partial class SettingsWindow : Window
 
     public SettingsWindow(ConfigService cfg, IconService icons,
         ObservableCollection<AppEntry> registered, Action onChanged,
-        Action<int>? onHotkeyChanged = null)
+        Action<int>? onHotkeyChanged = null, Action<bool>? onMemoryOnlyChanged = null)
     {
         InitializeComponent();
         _cfg = cfg;
@@ -34,6 +35,7 @@ public partial class SettingsWindow : Window
         _registered = registered;
         _onChanged = onChanged;
         _onHotkeyChanged = onHotkeyChanged;
+        _onMemoryOnlyChanged = onMemoryOnlyChanged;
 
         RegisteredList.ItemsSource = _registered;
         RunningList.ItemsSource = _running;
@@ -45,6 +47,10 @@ public partial class SettingsWindow : Window
         SidebarCheck.IsChecked = _cfg.Config.SidebarEnabled;
         SidebarCheck.Checked += (_, _) => { _cfg.Config.SidebarEnabled = true; _cfg.Save(); _onChanged(); };
         SidebarCheck.Unchecked += (_, _) => { _cfg.Config.SidebarEnabled = false; _cfg.Save(); _onChanged(); };
+
+        MemoryOnlyCheck.IsChecked = _cfg.Config.MemoryOnly;
+        MemoryOnlyCheck.Checked += (_, _) => { _cfg.Config.MemoryOnly = true; _cfg.Save(); _onMemoryOnlyChanged?.Invoke(true); };
+        MemoryOnlyCheck.Unchecked += (_, _) => { _cfg.Config.MemoryOnly = false; _cfg.Save(); _onMemoryOnlyChanged?.Invoke(false); };
 
         HotkeyButton.Content = VkName(_cfg.Config.HotkeyVk);
         _suppressPinned = true;

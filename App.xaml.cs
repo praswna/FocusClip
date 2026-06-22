@@ -163,7 +163,8 @@ public partial class App : Application
         _toast = new Toast();
         _capsIndicator = new CapsIndicator();
         _capsIndicator.ToggleRequested += () => NativeMethods.ToggleCapsLock(); // 클릭 → 대소문자 전환(후크는 무시)
-        _clipboard.LoadHistory(); // P004/P012: Start() 전에 이전 히스토리 복원
+        _clipboard.MemoryOnly = _configSvc.Config.MemoryOnly; // 보안: 메모리 전용 모드(디스크 미저장) — LoadHistory 전에 설정
+        _clipboard.LoadHistory();// P004/P012: Start() 전에 이전 히스토리 복원
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
         {
@@ -520,7 +521,8 @@ public partial class App : Application
         {
             _settings = new SettingsWindow(_configSvc, _icons, _apps,
                 onChanged: () => { RebuildSidebar(); RefreshActiveStates(); },
-                onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; });
+                onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; },
+                onMemoryOnlyChanged: v => _clipboard.MemoryOnly = v);
             _settings.Closed += (_, _) => _settings = null;
             _settings.Show();
         }
