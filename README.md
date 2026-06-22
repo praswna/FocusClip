@@ -3,6 +3,15 @@
 여러 CG 프로그램을 오가며 작업할 때 **앱 전환**과 **클립보드**를 한 번에 빠르게 다루는 Windows 트레이 유틸리티.
 C# / .NET 8 / WPF로 작성, 단일 EXE로 배포된다(.NET 8 Runtime 필요).
 
+<p align="center">
+  <img src="sidebar.png" alt="사이드바" height="380">
+  &nbsp;&nbsp;
+  <img src="popup.png" alt="클립보드 팝업 · 런처 도크 · 경로 팝업" height="380">
+  &nbsp;&nbsp;
+  <img src="setting.png" alt="설정 창" height="380">
+</p>
+<p align="center"><sub>왼쪽부터 — 고정 앱 <b>사이드바</b> · <b>클립보드 팝업</b>+<b>도크</b>+<b>경로 팝업</b> · <b>설정 창</b></sub></p>
+
 ## 왜 만들었나
 
 3D·그래픽 작업은 보통 한 프로그램이 아니라 **여러 CG 도구(3ds Max, Maya, Blender, Photoshop, Substance, ZBrush …)를 계속 오가며** 진행된다. 그 과정에서 생기는 두 가지 마찰을 줄이려고 만들었다.
@@ -17,16 +26,6 @@ C# / .NET 8 / WPF로 작성, 단일 EXE로 배포된다(.NET 8 Runtime 필요).
 - 도크 아이콘 **클릭**=해당 앱으로 전환/실행, **숫자키 1~9**=고정 구간 앱 즉시 전환, **우클릭**=설정한 동작(기본: 항상 위).
 - 도크 위/아래로 **클립보드 팝업**과 **경로 팝업**이 함께 뜬다 — 항목 클릭 시 직전 창에 자동 붙여넣기.
 - 멀티모니터 지원: 커서가 있는 모니터에 표시된다.
-
-## 스크린샷
-
-<p align="center">
-  <img src="sidebar.png" alt="사이드바" height="430">
-  &nbsp;&nbsp;&nbsp;
-  <img src="popup.png" alt="클립보드 팝업 · 런처 도크 · 경로 팝업" height="430">
-</p>
-
-<p align="center"><sub>왼쪽: 고정 앱 <b>사이드바</b>(단축키 번호 배지) — 오른쪽: <b>클립보드 팝업</b> + 런처 <b>도크</b> + <b>경로 팝업</b></sub></p>
 
 ## 주요 기능
 
