@@ -1,96 +1,139 @@
 # FocusClip
 
-FocusManager(AHK)와 Clipboard-Manager(PyQt6)를 단일 네이티브 앱으로 통합한 Windows 유틸리티.  
-C# / .NET 8 / WPF로 작성되었으며 단일 EXE로 배포된다(.NET 8 Runtime 필요).
+여러 CG 프로그램을 오가며 작업할 때 **앱 전환**과 **클립보드**를 한 번에 빠르게 다루는 Windows 트레이 유틸리티.
+C# / .NET 8 / WPF로 작성, 단일 EXE로 배포된다(.NET 8 Runtime 필요).
+
+## 왜 만들었나
+
+3D·그래픽 작업은 보통 한 프로그램이 아니라 **여러 CG 도구(3ds Max, Maya, Blender, Photoshop, Substance, ZBrush …)를 계속 오가며** 진행된다. 그 과정에서 생기는 두 가지 마찰을 줄이려고 만들었다.
+
+1. **프로그램 전환** — `CapsLock` 한 번으로 등록한 프로그램들이 마우스 옆에 떠서, 클릭·숫자키로 즉시 그 창으로 점프(없으면 실행)한다. 작업 흐름을 끊지 않고 도구 사이를 이동한다.
+2. **클립보드 조작** — 복사한 텍스트·이미지·파일경로를 히스토리로 모아두고, 골라서 바로 붙여넣거나 다른 앱으로 드래그한다. 매번 다시 복사할 필요가 없다.
+3. **경로 분리** — 파일 경로/URL은 일반 텍스트와 성격이 다르므로 **별도 "경로" 팝업**으로 분리해 표시하고, 저장도 텍스트/이미지를 폴더로 나눠 둔다. 잡다한 텍스트에 묻히지 않는다.
+
+## 한눈에
+
+- **CapsLock** → 마우스 위치(있는 모니터)에 런처 도크가 뜬다. 다시 누르면 닫힌다.
+- 도크 아이콘 **클릭**=해당 앱으로 전환/실행, **숫자키 1~9**=고정 구간 앱 즉시 전환, **우클릭**=설정한 동작(기본: 항상 위).
+- 도크 위/아래로 **클립보드 팝업**과 **경로 팝업**이 함께 뜬다 — 항목 클릭 시 직전 창에 자동 붙여넣기.
+- 멀티모니터 지원: 커서가 있는 모니터에 표시된다.
 
 ## 주요 기능
 
-| 기능 | 설명 |
-|------|------|
-| **런처 도크** | CapsLock 누르면 등록 앱 목록 팝업. 숫자키(고정 개수만큼, 최대 1~9)로 즉시 전환 |
-| **클립보드 히스토리** | 텍스트/이미지 최근 20개 표시(재시작 후에도 유지), 팝업에서 선택 후 자동 붙여넣기, 드래그앤드롭으로 다른 앱에 직접 드롭. 전체/텍스트/이미지 필터. 카드별 수정/고정/저장 위치 열기(📂)/삭제. 삭제(✕)는 목록에서만 제거하고 본문 파일은 폴더에 보존(완전 수동 정리), 헤더에 폴더 파일 수 표시(클릭=폴더 열기) |
-| **경로 팝업** | 복사된 파일 경로·URL을 별도 팝업에서 함축 표시. 클릭=경로 붙여넣기, 드래그=텍스트로 드롭, ↗=로컬/URL 열기, 전체/로컬/URL 필터 |
-| **항상 위 토글** | 사이드바에서 우클릭 → 대상 창을 TopMost 전환 |
-| **텍스트 편집기** | 클립 텍스트를 편집 후 재붙여넣기 |
-| **이미지 어노테이션** | 클립 이미지에 텍스트/도형 주석 추가 후 저장 |
-| **토스트 알림** | 새 클립 캡처 시, 드래그 드롭 실패 시 우하단 알림 |
-| **시스템 트레이** | 트레이 상주, 우클릭 메뉴로 설정/저장 폴더 열기/종료 |
-| **자동 시작** | 설정에서 Windows 시작 시 자동 실행 등록/해제 |
+### 런처 도크
+| | |
+|--|--|
+| 앱 전환/실행 | 아이콘 클릭 = 활성화(없으면 실행). 숫자키 `1`~`9`로 고정 구간 앱 즉시 전환 |
+| 단축키 번호 배지 | 고정 구간 아이콘 좌상단에 `1`,`2`… 표시(도크·사이드바 공통) |
+| 순서 변경 / 제거 | 아이콘 드래그로 순서 변경, 도크 밖으로 드래그하면 제거 |
+| 고정 구간 구분선 | 숫자키·사이드바 대상이 되는 앞쪽 N개를 세로선으로 구분 |
+| `+` / `✕` | `+` = 설정 열기(앱 추가), `✕` = 프로그램 종료 |
+| 활성 표시등 | 실행 중(파랑)·항상 위(주황) 상태를 아이콘 하단에 표시 |
+
+### 왼쪽 사이드바 (켜고 끌 수 있음)
+화면 왼쪽 가장자리에 고정 구간 앱을 상시 표시한다. `:::` 핸들로 세로 위치 이동. 설정에서 표시 on/off.
+
+### 클립보드 팝업
+- 텍스트/이미지 최근 20개, **재시작 후에도 유지**
+- 카드에 **날짜+시간** 표시, `전체 / 텍스트 / 이미지` 필터, 헤더 좌측 **"클립보드"** 제목
+- 클릭 = 직전 창에 자동 붙여넣기, **드래그 = 다른 앱/탐색기에 직접 드롭**
+- 카드별: 수정(✎) · 고정핀(📌) · 저장 위치 열기(📂) · 삭제(✕)
+- **팝업 고정핀** — 켜면 CapsLock·바깥클릭에도 닫히지 않고 유지되며, **이동 핸들**로 위치를 옮길 수 있다(평소엔 도크 위 고정)
+- 헤더에 저장 폴더 파일 수 표시(클릭 = 폴더 열기), 다크 테마 스크롤바
+- 삭제(✕)는 목록에서만 제거 — 본문 파일은 폴더에 보존(정리는 수동)
+
+### 경로 팝업 (텍스트와 분리)
+복사한 **파일 경로·URL**을 별도 팝업에 함축 표시(이름 + 축약 경로). `전체 / 로컬 / URL` 필터, 헤더 좌측 **"경로"** 제목. 클릭 = 경로 붙여넣기, 드래그 = 텍스트로 드롭, **고정핀(📌)**, 열기(↗) = 폴더는 지정 파일 관리자로·파일/URL은 기본 앱으로. 없는 경로는 흐리게 표시.
+
+### 편집기
+- **텍스트 편집기** — 클립 텍스트 수정(휠로 글자 크기), 「원본 덮어쓰기」/「새 클립으로」
+- **이미지 주석** — 이미지 위 펜/지우개(색·굵기), 휠 줌·중클릭 팬, Undo/Redo, 합성 후 새 클립으로 저장
+
+### CapsLock 대소문자 인디케이터
+CapsLock은 도크 단축키이자 실제 대소문자 토글이므로, 누르면 현재 상태(`A`/`a`)를 마우스 옆(도크와 같은 높이로 정렬)에 표시한다. **클릭하면 대소문자가 전환**된다.
+
+### 기타
+- **토스트 알림** — 새 클립 캡처 시 우하단 알림(이미지는 썸네일 미리보기), 드롭 실패 안내
+- **시스템 트레이** 상주 — 우클릭 메뉴: 설정 / 저장 폴더 열기 / 종료
+- **자동 시작** — Windows 시작 시 자동 실행(설정에서 on/off, 배포 위치가 바뀌어도 경로 자가 보정)
+- **단일 인스턴스** — 실행 중 다시 실행하면 새 창 대신 도크가 열린다
 
 ## 단축키
 
 | 키 | 동작 |
 |----|------|
-| `CapsLock` | 런처 도크 열기/닫기 |
-| `1` ~ `9` | 도크 표시 중 — 고정 구간 앱 활성화(없으면 실행). 고정 개수만큼 동작 |
-| `Esc` | 도크/팝업 닫기 |
-| 그 외 키 | 도크 자동 닫기(키는 대상 앱에 그대로 전달) |
+| `CapsLock` | 런처 도크(+팝업) 열기/닫기 — 커서가 있는 모니터에 표시 |
+| `1` ~ `9` | 도크 표시 중 — 고정 구간 앱 활성화(없으면 실행) |
+| `Esc` | 도크·팝업 전부 닫기(고정핀 포함) |
+| 그 외 키 | 도크 자동 닫기(고정핀 팝업은 유지, 키는 대상 앱에 전달) |
 
-기본 단축키(CapsLock)는 설정 창에서 변경 가능.
+기본 단축키(CapsLock)는 설정에서 변경 가능.
 
-이미 실행 중일 때 EXE를 다시 실행하면 새 인스턴스가 뜨지 않고 런처 도크가 열린다(단일 인스턴스).
+## 설정 (트레이 우클릭 → 설정, 또는 도크 `+`)
 
-## 빌드 및 실행
+| 항목 | 설명 |
+|------|------|
+| 윈도우 시작 시 자동 실행 | HKCU Run 등록/해제 |
+| 왼쪽 사이드바 표시 | 사이드바 on/off (기본 on) |
+| 단축키 | 도크 단축키 키 변경 |
+| 고정 개수 | 앞쪽 N개 = 숫자키·사이드바 대상 |
+| 우클릭 동작 | 아이콘 우클릭 시: 항상 위 / 창 닫기 / 최소화 / 없음 |
+| 폴더 열기 프로그램 | 비우면 탐색기, **Q-Dir 등 파일 관리자 지정 가능**(+ 실행 인자 템플릿 `%path%`) |
+| 등록 앱 추가/제거 | 실행 중인 창 목록에서 도크에 추가/제거 |
+| 📁 Config 폴더 / ☕ 후원 | 데이터 폴더 열기 / Ko-fi |
 
-개발 실행:
+> Q-Dir에서 **새 창 대신 기존 인스턴스의 새 탭**으로 열고 싶으면, Q-Dir 자체 설정(Tools → Q-Dir as… → "Open in a new tab, in the running instance")을 켜면 된다.
 
+## 빌드 및 배포
+
+**개발 반복(빠른 증분 Debug 빌드 + 실행):**
 ```
-dotnet run
+dev.bat
 ```
 
-단일 EXE 배포 — `build.bat` 실행(권장). 실행 중인 인스턴스 종료 → 정리 → publish →
-중간 산출물(bin/obj)·pdb 삭제 → 아이콘 캐시 새로고침 → **앱 자동 실행**.
-결과는 **`publish\FocusClip.exe` 하나만** 남는다.
-
+**배포(단일 EXE 빌드 + 실행):**
 ```
 build.bat
 ```
+실행 중 인스턴스 종료 → 정리 → `dotnet publish`(win-x64, ReadyToRun, 단일 EXE) → 중간 산출물 삭제 → 앱 자동 실행.
 
-배포 옵션(런타임 의존 단일 EXE, win-x64, ReadyToRun)은 `FocusClip.csproj`에 정의돼 있어
-수동 빌드도 동일하게 동작한다:
+> 배포 위치는 **`%LOCALAPPDATA%\FocusClip\app\FocusClip.exe`** 다.
+> ⚠️ Dropbox/OneDrive 등 **동기화 폴더 안에서 단일 EXE를 실행하면** 동기화 중 부분 상태로 실행돼 아이콘·저장이 깨질 수 있다. 그래서 소스는 동기화 폴더에 둬도 **배포는 동기화 밖(LocalAppData)** 으로 한다.
 
-```
-dotnet publish -c Release -o publish
-```
-
-출력: `publish\FocusClip.exe` (.NET 8 Runtime 필요)
+배포 전용 옵션(RID/단일EXE/R2R/self-contained)은 `csproj`가 아니라 `build.bat` 명령줄로만 전달한다 — 그래야 일반 `dotnet build`(dev)가 빠르다.
 
 ## 요구 사항
-
 - Windows 10/11 x64
-- .NET 8 Runtime (또는 self-contained 배포 사용)
+- .NET 8 Runtime (런타임 의존 배포)
 
-## 설정 파일
+## 데이터 위치
 
-모든 앱 데이터는 `%LOCALAPPDATA%\FocusClip\` 한 폴더 아래에 모여 있다(OneDrive·로밍 비대상 로컬 전용 → 드래그·열기 지연 없음). 구버전 `%APPDATA%\FocusClip` 데이터는 첫 실행 시 자동 이전된다.
+모든 데이터는 `%LOCALAPPDATA%\FocusClip\` 아래에 모인다(로컬 전용 → 드래그·열기 지연 없음). 구버전 `%APPDATA%\FocusClip` 데이터는 첫 실행 시 자동 이전.
 
-| 파일 | 내용 |
+| 경로 | 내용 |
 |------|------|
-| `%LOCALAPPDATA%\FocusClip\config.json` | 앱 목록·단축키 설정. 직접 편집하거나 설정 창으로 관리 |
-| `%LOCALAPPDATA%\FocusClip\clips.json` | 클립보드 히스토리 메타데이터(해시/핀/시각 + 본문 파일 경로). 재시작 후에도 유지 |
-| `%LOCALAPPDATA%\FocusClip\media\` | 클립 본문 저장 위치 — 이미지는 PNG, 텍스트/경로는 TXT 파일. 트레이 우클릭 → "저장 폴더 열기"로 바로 접근 |
-| `%LOCALAPPDATA%\FocusClip\icons\` | 런처 앱 아이콘 PNG 캐시 |
+| `config.json` | 앱 목록 · 단축키 · 각종 설정 (원자적 저장 + `config.bak` 자동 복구) |
+| `clips.json` | 클립 히스토리 메타데이터(해시/핀/시각 + 본문 파일 경로) |
+| `media\text\` | 텍스트·경로 클립 본문(`.txt`) |
+| `media\image\` | 이미지 클립 본문(`.png`) |
+| `icons\` | 런처 앱 아이콘 PNG 캐시 |
+| `app\` | 배포된 실행 파일(`FocusClip.exe`) |
 
 ## 프로젝트 구조
 
 ```
 FocusClip/
-├── Models/          AppConfig, AppEntry, ClipItem
-├── Services/        ClipboardService, HotkeyService, WindowManager
-│                    ConfigService, IconService, PasteService, StartupService
-├── Views/           LauncherDock, Sidebar, ClipboardPopup, PathPopup
-│                    SettingsWindow, TextEditWindow, ImageAnnotateWindow, Toast
-├── Interop/         NativeMethods (Win32 P/Invoke)
-├── Themes/          Dark.xaml
+├── Models/      AppConfig, AppEntry, ClipItem
+├── Services/    ClipboardService, HotkeyService, WindowManager, ConfigService,
+│                IconService, PasteService, StartupService, FolderLauncher
+├── Views/       LauncherDock, Sidebar, ClipboardPopup, PathPopup, SettingsWindow,
+│                TextEditWindow, ImageAnnotateWindow, Toast, CapsIndicator
+├── Interop/     NativeMethods (Win32 P/Invoke), ScreenUtil (멀티모니터)
+├── Themes/      Dark.xaml
+├── build.bat / dev.bat
 └── App.xaml
 ```
 
-## 원본 앱과의 대응
+## 내력
 
-| FocusClip | 기존 |
-|-----------|------|
-| `HotkeyService` (LL 키보드 후크) | FocusManager AHK 스크립트 |
-| `ClipboardService` (WM_CLIPBOARDUPDATE) | Clipboard-Manager 폴링 스레드 |
-| `WindowManager.ActivateOrRun` | FM `ActivateOrRun` 함수 |
-| `LauncherDock` | FM 팝업 UI |
-| `ClipboardPopup` | CM 팝업 UI |
+기존 **FocusManager(AutoHotkey 런처)** 와 **Clipboard-Manager(PyQt6 클립보드)** 를 하나의 네이티브 WPF 앱으로 통합한 것이다. 폴링·프로세스 간 충돌·깜빡임을 없애고, 저수준 키보드 후크 + `WM_CLIPBOARDUPDATE` 리스너로 더 빠르고 가볍게 동작한다.
