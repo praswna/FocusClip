@@ -102,10 +102,12 @@ dev.bat
 
 **배포 — 두 가지 버전:**
 
-| bat | 대상 | EXE 크기 | .NET 8 Runtime |
-|-----|------|----------|----------------|
-| `build.bat` | 개발자·사내 배포 | ~5 MB | 설치 필요 |
-| `build-standalone.bat` | 일반 사용자 배포 | ~150 MB | 불필요 (번들) |
+| bat | 출력 파일 | EXE 크기 | .NET 8 Runtime |
+|-----|-----------|----------|----------------|
+| `build.bat` | `FocusClip.exe` | ~0.5 MB | **필요** (의존성 없음·경량) |
+| `build-standalone.bat` | `FocusClip-Standalone.exe` | ~170 MB | **불필요** (의존성 포함·단일 EXE) |
+
+이름이 달라 둘 다 `%LOCALAPPDATA%\FocusClip\app\` 에 공존한다. 일상용·자동시작 대상은 `FocusClip.exe`, .NET 없는 PC에 나눠줄 단독 실행본은 `FocusClip-Standalone.exe`.
 
 실행 중 인스턴스 종료 → 정리 → `dotnet publish`(win-x64, ReadyToRun, 단일 EXE) → 중간 산출물 삭제 → 앱 자동 실행.
 
