@@ -66,6 +66,10 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern short GetAsyncKeyState(int vKey);
 
+    // 토글 상태(CapsLock 등)는 GetKeyState 의 최하위 비트로 읽는다(0x0001 set = 켜짐).
+    [DllImport("user32.dll")]
+    public static extern short GetKeyState(int nVirtKey);
+
     // x64 대상: GetWindowLongPtr/SetWindowLongPtr 사용 (스타일 비트 64비트 안전)
     [DllImport("user32.dll", SetLastError = true, EntryPoint = "GetWindowLongPtrW")]
     public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
@@ -82,8 +86,14 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool DestroyIcon(IntPtr hIcon);
 
-    // ── 창 활성화 ──
+    // ── 창 활성화/제어 ──
     public const int SW_RESTORE = 9;
+    public const int SW_MINIMIZE = 6;
+    public const uint WM_CLOSE = 0x0010;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -145,6 +155,17 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    // FocusClip 이 합성한 CapsLock 토글에 붙이는 표식. 후크가 dwExtraInfo 로 자기 입력을 구별해 무시한다.
+    public const long CAPS_SYNTH_TAG = 0x4643CA95;
+
+    /// <summary>CapsLock 토글을 합성(대소문자 전환). CAPS_SYNTH_TAG 표식이 붙어 단축키 후크는 이 입력을 무시한다.</summary>
+    public static void ToggleCapsLock()
+    {
+        UIntPtr tag = (UIntPtr)(ulong)CAPS_SYNTH_TAG;
+        keybd_event((byte)VK_CAPITAL, 0x3A, 0, tag);                 // down (0x3A = CapsLock 스캔코드)
+        keybd_event((byte)VK_CAPITAL, 0x3A, KEYEVENTF_KEYUP, tag);   // up
+    }
 
     /// <summary>포그라운드 잠금을 우회하여 대상 창을 확실히 활성화한다(FM의 활성화 로직 대응).</summary>
     public static void ForceForeground(IntPtr hwnd)

@@ -36,6 +36,15 @@ public class AppEntry : INotifyPropertyChanged
         set { _isTopMost = value; OnPropertyChanged(); }
     }
 
+    // 도크 숫자키 라벨("1"~"9"). 고정구간 앱만 채워지고, 그 외엔 ""(미표시). 도크가 인덱스/PinnedCount 기준으로 갱신.
+    private string _hotkeyLabel = "";
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string HotkeyLabel
+    {
+        get => _hotkeyLabel;
+        set { _hotkeyLabel = value; OnPropertyChanged(); }
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? n = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));

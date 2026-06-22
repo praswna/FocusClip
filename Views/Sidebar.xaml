@@ -56,6 +56,22 @@
                             Margin="0,2">
                         <Grid Width="24" Height="29">
                             <Image Source="{Binding Icon}" Width="24" Height="24" VerticalAlignment="Top"/>
+                            <!-- 단축키 번호(고정구간 1~9): 도크와 동일하게 좌상단에 작게 -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="#CC000000" CornerRadius="3" Padding="2,0" Margin="-2,-2,0,0">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HotkeyLabel}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding HotkeyLabel}" FontSize="8" FontWeight="Bold"
+                                           Foreground="White" LineHeight="10" LineStackingStrategy="BlockLineHeight"/>
+                            </Border>
                             <Rectangle Height="2.5" Width="20" RadiusX="1.25" RadiusY="1.25"
                                        VerticalAlignment="Bottom">
                                 <Rectangle.Style>

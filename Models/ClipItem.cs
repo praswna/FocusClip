@@ -48,7 +48,7 @@ public class ClipItem : INotifyPropertyChanged
     /// 완전 수동(파일 보존)이라 어디서도 true로 설정하지 않으며, 안전 훅으로만 남겨 둔다.</summary>
     public volatile bool Removed;
 
-    public string TimeLabel => Time.ToString("HH:mm:ss");
+    public string TimeLabel => Time.ToString("yyyy-MM-dd HH:mm:ss");
     public string Snippet => IsImage ? "" : (Text.Length > 300 ? Text[..300] : Text);
 
     // ── 경로 항목 함축 표시 ──
@@ -57,19 +57,24 @@ public class ClipItem : INotifyPropertyChanged
         Text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
         Text.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>로컬 경로가 실제 존재하는지(URL은 항상 true). 카드 흐림/열기 안내용.</summary>
+    private bool _pathExists = true; // 검사 전엔 존재 가정(팝업 즉시 표시). 백그라운드 검사로 갱신.
+    /// <summary>로컬 경로 존재 여부(카드 흐림 표시용·바인딩). 디스크 검사는 <see cref="CheckPathExists"/>로
+    /// 백그라운드에서 수행해 이 값을 갱신한다 — 렌더링마다 UI 스레드에서 디스크를 두드리지 않게.</summary>
     public bool PathExists
     {
-        get
-        {
-            if (IsUrl) return true;
-            string t = Text.Trim();
-            // UNC(\\server\...)는 오프라인일 때 File/Directory.Exists가 UI 스레드를 수 초간
-            // 블로킹하므로 검사를 건너뛰고 존재한다고 가정(팝업 응답성 보호).
-            if (t.StartsWith(@"\\")) return true;
-            try { return System.IO.File.Exists(t) || System.IO.Directory.Exists(t); }
-            catch { return false; }
-        }
+        get => _pathExists;
+        set { _pathExists = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>경로 존재 여부를 디스크에서 직접 확인(URL·UNC는 true 가정). UI 블로킹 방지를 위해 백그라운드 호출 권장.</summary>
+    public bool CheckPathExists()
+    {
+        if (IsUrl) return true;
+        string t = Text.Trim();
+        // UNC(\\server\...)는 오프라인일 때 File/Directory.Exists가 수 초간 블로킹하므로 존재 가정.
+        if (t.StartsWith(@"\\")) return true;
+        try { return System.IO.File.Exists(t) || System.IO.Directory.Exists(t); }
+        catch { return false; }
     }
 
     /// <summary>경로/URL의 주 텍스트(파일·폴더명 또는 URL 마지막 세그먼트).</summary>

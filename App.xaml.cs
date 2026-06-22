@@ -37,6 +37,7 @@ public partial class App : Application
     private ClipboardPopup? _clipPopup;
     private PathPopup? _pathPopup;
     private Toast? _toast;
+    private CapsIndicator? _capsIndicator;
     private DispatcherTimer? _refreshTimer;
     private DispatcherTimer? _outsidePoll;   // 오토클로즈: 외부 클릭 감지
     private DateTime _overlayShownAt;
@@ -74,6 +75,12 @@ public partial class App : Application
             try { StartupService.SetEnabled(true); } catch { /* 레지스트리 권한 문제 등 무시 */ }
             _configSvc.Config.StartupRegistered = true;
             _configSvc.Save();
+        }
+        else
+        {
+            // 자동시작이 켜져 있으면 Run 키 경로를 현재 exe로 자가 보정 — 배포 위치가 바뀌어도
+            // (예: Dropbox\publish → %LOCALAPPDATA%\app) 시작프로그램이 옛 경로를 가리키지 않게.
+            try { if (StartupService.IsEnabled()) StartupService.SetEnabled(true); } catch { }
         }
 
         foreach (var a in _configSvc.Config.Apps) _apps.Add(a);
@@ -125,6 +132,7 @@ public partial class App : Application
         // 드래그가 구분선을 넘으면 고정 개수 갱신(저장은 뒤따르는 AppsReordered→OnAppsChanged가 처리).
         _dock.PinnedCountChanged += n => _configSvc.Config.PinnedCount = n;
         _dock.AddRequested += () => Dispatcher.BeginInvoke(OpenSettings); // [+] → 설정 열기
+        _dock.ExitRequested += () => Dispatcher.BeginInvoke(ExitApp);      // [✕] → 프로그램 종료
         _dock.SetPinnedCount(_configSvc.Config.PinnedCount);
     }
 
@@ -147,16 +155,21 @@ public partial class App : Application
         _sidebar.SetApps(_apps.Take(n).ToList());
         _sidebar.AppActivated += app => _windows.ActivateOrRun(app); // 항상 표시 → 숨기지 않음
         _sidebar.AppRightClicked += OnAppRightClicked;
-        _sidebar.Show();
+        if (_configSvc.Config.SidebarEnabled) _sidebar.Show(); // 설정에서 끄면 표시 안 함
     }
 
     private void SetupClipboard()
     {
         _toast = new Toast();
+        _capsIndicator = new CapsIndicator();
+        _capsIndicator.ToggleRequested += () => NativeMethods.ToggleCapsLock(); // 클릭 → 대소문자 전환(후크는 무시)
         _clipboard.LoadHistory(); // P004/P012: Start() 전에 이전 히스토리 복원
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
-            _toast?.ShowToast(item.IsImage ? "🖼 이미지" : item.IsPath ? item.PathName : item.Snippet));
+        {
+            if (item.IsImage) _toast?.ShowToast(item.Thumb);            // 썸네일 미리보기
+            else _toast?.ShowToast(item.IsPath ? item.PathName : item.Snippet);
+        });
         _clipPopup = new ClipboardPopup();
         _clipPopup.SetItems(_clipboard.Items);
         _clipPopup.ClipSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
@@ -165,6 +178,7 @@ public partial class App : Application
         _clipPopup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
         _clipPopup.ClipOpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
         _clipPopup.OpenFolderRequested += () => Dispatcher.BeginInvoke(OpenSaveFolder);
+        _clipPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_clipPopup));
         _clipPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
 
         _pathPopup = new PathPopup();
@@ -172,8 +186,22 @@ public partial class App : Application
         _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
         _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => _clipboard.Remove(item));
         _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
+        _pathPopup.PathPinToggled += item => Dispatcher.BeginInvoke(() => _clipboard.TogglePin(item));
+        _pathPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_pathPopup));
         _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
     }
+
+    /// <summary>핀 해제 시: 도크가 숨겨진 '단독 핀 팝업'이라면 닫는다(CapsLock 으로 안 닫히므로 핀 해제가 닫는 수단).</summary>
+    private void OnPopupPinChanged(Window? popup)
+    {
+        if (popup == null) return;
+        bool dockVisible = _dock?.IsVisible ?? false;
+        bool pinned = popup is ClipboardPopup cp ? cp.Pinned : popup is PathPopup pp && pp.Pinned;
+        if (!pinned && !dockVisible) popup.Hide();
+    }
+
+    /// <summary>현재 CapsLock 토글 상태(켜짐=대문자).</summary>
+    private static bool CapsOn() => (NativeMethods.GetKeyState(NativeMethods.VK_CAPITAL) & 0x0001) != 0;
 
     private void SetupHotkey()
     {
@@ -198,12 +226,17 @@ public partial class App : Application
         {
             foreach (var app in apps)
             {
-                var img = _icons.GetIcon(app);
-                if (img != null) Dispatcher.Invoke(() => app.Icon = img);
+                try // 견고화: 한 앱의 아이콘 로드 실패가 전체 로드를 중단시키지 않게 한다.
+                {
+                    var img = _icons.GetIcon(app);
+                    if (img != null) Dispatcher.Invoke(() => app.Icon = img);
+                }
+                catch { /* 개별 아이콘 실패는 무시하고 계속 */ }
             }
             // self-heal 된 exe 경로 저장. 단, 앱이 0개면 저장하지 않는다 — 로드 실패로 비어있는 상태를
             // 그대로 영속화해 정상 설정을 덮어쓰는 사고를 막는다(앱이 있을 때만 self-heal 의미가 있음).
-            if (apps.Length > 0) Dispatcher.Invoke(() => _configSvc.Save());
+            try { if (apps.Length > 0) Dispatcher.Invoke(() => _configSvc.Save()); }
+            catch { }
         });
     }
 
@@ -232,7 +265,9 @@ public partial class App : Application
     // ── 오버레이(도크 + 클립 팝업) 토글 ──
     private void ToggleOverlay()
     {
-        if ((_dock?.IsVisible ?? false) || (_clipPopup?.IsVisible ?? false) || (_pathPopup?.IsVisible ?? false)) HideOverlay(force: true);
+        // 도크 표시 여부로 토글. force:false 라서 핀된 팝업은 CapsLock 으로 닫히지 않고 유지된다(사용자 요청).
+        // 도크가 숨겨진 상태에서 보이는 팝업은 '핀된 것'뿐이므로 도크 기준 판정이 안전하다.
+        if (_dock?.IsVisible ?? false) HideOverlay(force: false);
         else ShowOverlay();
     }
 
@@ -241,9 +276,13 @@ public partial class App : Application
         _prevForeground = NativeMethods.GetForegroundWindow(); // 붙여넣기 대상 기억
         RefreshActiveStates(); // 비동기 — 표시를 막지 않고, 활성 표시(IsActive)는 도크 표시 직후 한 틱 내 갱신
         _dock!.ShowAtCursor();
+        _capsIndicator?.ShowAligned(_dock, CapsOn()); // 도크 왼쪽에 같은 높이로 대소문자 표시(클릭 전환)
         if (_clipboard.Items.Count > 0) _clipPopup!.ShowAbove(_dock); // 클립이 있을 때만 도크 위에
         if (_clipboard.Paths.Count > 0) // 경로가 있을 때만 도크 아래에(클립 팝업과 겹치지 않게)
+        {
+            _clipboard.RefreshPathExistsAll(); // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
             _pathPopup!.ShowBelow(_dock, _clipPopup!.IsVisible ? _clipPopup : null);
+        }
         _hotkey!.CaptureExtraKeys = true;
         _overlayShownAt = DateTime.Now;
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
@@ -253,6 +292,7 @@ public partial class App : Application
     private void HideOverlay(bool force = false)
     {
         _dock?.Hide();
+        _capsIndicator?.Hide(); // 대소문자 인디케이터는 항상 오버레이와 함께 닫힌다(핀 대상 아님)
         if (force || !(_clipPopup?.Pinned ?? false)) _clipPopup?.Hide();
         if (force || !(_pathPopup?.Pinned ?? false)) _pathPopup?.Hide();
         if (_hotkey != null) _hotkey.CaptureExtraKeys = false;
@@ -279,7 +319,9 @@ public partial class App : Application
             bool outsideDock = !dockVisible || _dock == null || CursorOutside(_dock);
             bool outsidePopup = !popupVisible || _clipPopup == null || CursorOutside(_clipPopup);
             bool outsidePath = !pathVisible || _pathPopup == null || CursorOutside(_pathPopup);
-            if (outsideDock && outsidePopup && outsidePath) HideOverlay(force: false);
+            bool capsVisible = _capsIndicator?.IsVisible ?? false;
+            bool outsideCaps = !capsVisible || _capsIndicator == null || CursorOutside(_capsIndicator);
+            if (outsideDock && outsidePopup && outsidePath && outsideCaps) HideOverlay(force: false);
         }
         catch { /* 30ms 타이머는 절대 앱을 죽이지 않게 */ }
     }
@@ -310,7 +352,21 @@ public partial class App : Application
 
     private void OnAppRightClicked(AppEntry app)
     {
-        app.IsTopMost = _windows.ToggleTopMost(app); // 항상-위 토글(주황 표시등) — 오버레이는 유지
+        // 우클릭 동작은 설정값에 따른다(도크·사이드바 공통). 오버레이는 유지.
+        switch (_configSvc.Config.RightClickAction)
+        {
+            case DockRightClickAction.AlwaysOnTop:
+                app.IsTopMost = _windows.ToggleTopMost(app); // 항상-위 토글(주황 표시등)
+                break;
+            case DockRightClickAction.Close:
+                _windows.CloseWindow(app);
+                break;
+            case DockRightClickAction.Minimize:
+                _windows.MinimizeWindow(app);
+                break;
+            case DockRightClickAction.None:
+                break;
+        }
     }
 
     private void ActivatePinned(int n)
@@ -349,14 +405,22 @@ public partial class App : Application
     private void OnPathOpen(ClipItem item)
     {
         HideOverlay(force: true);
-        if (!item.PathExists) // 이동/삭제된 로컬 경로
+        if (!item.CheckPathExists()) // 클릭 시점 최신 확인(이동/삭제된 로컬 경로)
         {
             _toast?.ShowToast("경로를 찾을 수 없음");
             return;
         }
-        try { Process.Start(new ProcessStartInfo(item.Text) { UseShellExecute = true }); }
+        try
+        {
+            if (Directory.Exists(item.Text)) OpenFolderWith(item.Text);        // 폴더면 지정 파일 관리자로
+            else Process.Start(new ProcessStartInfo(item.Text) { UseShellExecute = true }); // 파일/URL은 기본 앱
+        }
         catch { _toast?.ShowToast("열 수 없음"); }
     }
+
+    /// <summary>폴더를 설정된 파일 관리자(예: Q-Dir)로 연다. 미설정/경로 없음이면 기본 탐색기로 폴백.</summary>
+    private void OpenFolderWith(string folder)
+        => FolderLauncher.OpenFolder(folder, _configSvc.Config.FileManagerPath, _configSvc.Config.FileManagerArgs);
 
     // ── 클립 편집(C4 텍스트 / C5 이미지 주석) ──
     private void OnClipEdit(ClipItem item)
@@ -422,7 +486,13 @@ public partial class App : Application
         try
         {
             if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
-                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.FilePath}\"") { UseShellExecute = true });
+            {
+                string fm = _configSvc.Config.FileManagerPath;
+                if (!string.IsNullOrWhiteSpace(fm) && File.Exists(fm))
+                    OpenFolderWith(Path.GetDirectoryName(item.FilePath)!); // 커스텀 관리자는 폴더만(파일 선택 인자 규약이 제각각)
+                else
+                    Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.FilePath}\"") { UseShellExecute = true });
+            }
             else
                 OpenSaveFolder(); // 저장 전이거나 파일이 사라진 경우 폴더만 연다
         }
@@ -435,7 +505,7 @@ public partial class App : Application
         try
         {
             Directory.CreateDirectory(ClipboardService.SaveDir);
-            Process.Start(new ProcessStartInfo(ClipboardService.SaveDir) { UseShellExecute = true });
+            OpenFolderWith(ClipboardService.SaveDir);
         }
         catch { _toast?.ShowToast("폴더를 열 수 없음"); }
     }
@@ -443,23 +513,46 @@ public partial class App : Application
     // ── 설정 ──
     private void OpenSettings()
     {
-        if (_settings != null) { _settings.Activate(); return; }
-        _settings = new SettingsWindow(_configSvc, _icons, _apps,
-            onChanged: () => { RebuildSidebar(); RefreshActiveStates(); },
-            onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; });
-        _settings.Closed += (_, _) => _settings = null;
-        _settings.Show();
+        // 도크/팝업은 Topmost라 그대로 두면 설정창이 그 뒤로 가려진다 → 오버레이를 닫고 설정창을 앞으로.
+        HideOverlay(force: true);
+
+        if (_settings == null)
+        {
+            _settings = new SettingsWindow(_configSvc, _icons, _apps,
+                onChanged: () => { RebuildSidebar(); RefreshActiveStates(); },
+                onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; });
+            _settings.Closed += (_, _) => _settings = null;
+            _settings.Show();
+        }
+        else if (_settings.WindowState == WindowState.Minimized)
+        {
+            _settings.WindowState = WindowState.Normal;
+        }
+
         _settings.Activate();
+        // 포커스 비탈취 no-activate 도크에서 호출되므로, 포그라운드 잠금을 우회해 확실히 맨 앞으로 끌어올린다.
+        var h = new System.Windows.Interop.WindowInteropHelper(_settings).Handle;
+        if (h != IntPtr.Zero) NativeMethods.ForceForeground(h);
     }
 
     private void RebuildSidebar()
     {
         // 후크 숫자키 상한을 고정 개수에 동기화(설정 변경·드래그 양쪽에서 호출되는 단일 지점).
         if (_hotkey != null) _hotkey.MaxNumber = _configSvc.Config.PinnedCount;
-        if (_sidebar is null) return;
-        int n = Math.Min(_configSvc.Config.PinnedCount, _apps.Count);
-        _sidebar.SetApps(_apps.Take(n).ToList());
-        _sidebar.PositionLeftCenter();
+        if (_sidebar is not null)
+        {
+            if (_configSvc.Config.SidebarEnabled)
+            {
+                int n = Math.Min(_configSvc.Config.PinnedCount, _apps.Count);
+                _sidebar.SetApps(_apps.Take(n).ToList());
+                _sidebar.Show();              // 설정에서 켜면 표시
+                _sidebar.PositionLeftCenter();
+            }
+            else
+            {
+                _sidebar.Hide();              // 설정에서 끄면 숨김
+            }
+        }
         _dock?.SetPinnedCount(_configSvc.Config.PinnedCount); // 구분선 위치 갱신(F2)
     }
 

@@ -13,13 +13,11 @@
     <ApplicationIcon>app_icon.ico</ApplicationIcon>
     <Version>0.1.0</Version>
 
-    <!-- 배포: 런타임 의존 단일 EXE(win-x64). 산출물은 publish\ 한 곳으로 모은다.
-         AppendRuntimeIdentifierToOutputPath=false → bin\...\win-x64\ 중첩 폴더 제거. -->
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <SelfContained>false</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <!-- 배포 전용 속성(RID/단일EXE/ReadyToRun/self-contained)은 여기에 두지 않는다.
+         프로젝트에 박아두면 일반 dotnet build 도 RID 특화 + R2R 크로스젠을 타서 매우 느려짐.
+         → build.bat 의 dotnet publish 명령줄(-r win-x64, PublishSingleFile=true,
+           PublishReadyToRun=true, self-contained=false)로만 전달한다.
+         dev.bat(증분 Debug 빌드)는 이 속성들 없이 빠르게 돈다. -->
   </PropertyGroup>
 
   <ItemGroup>

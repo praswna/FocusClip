@@ -3,16 +3,20 @@ setlocal
 
 cd /d "%~dp0"
 
+rem Deploy OUTSIDE Dropbox. A single-file exe inside a synced folder can be
+rem partially synced / locked at launch and run corrupt (icons + saving break).
+set "DEPLOY=%LOCALAPPDATA%\FocusClip\app"
+
 echo === Killing running FocusClip.exe ===
 taskkill /IM FocusClip.exe /F >nul 2>&1
 
-echo === Cleaning old outputs ===
-rem Keep publish\ (overwrite in place) so the exe path stays stable for the icon cache.
+echo === Cleaning build intermediates ===
 if exist "bin" rmdir /s /q "bin"
 if exist "obj" rmdir /s /q "obj"
 
-echo === dotnet publish (single EXE -> publish\) ===
-dotnet publish FocusClip.csproj -c Release -o publish
+echo === Publishing single EXE to %DEPLOY% ===
+rem Publish-only props are passed here (not in csproj) to keep plain build fast.
+dotnet publish FocusClip.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:PublishReadyToRun=true -o "%DEPLOY%"
 
 if errorlevel 1 (
     echo.
@@ -21,20 +25,20 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo === Removing build intermediates (keep only publish\FocusClip.exe) ===
+echo === Removing build intermediates ===
 dotnet build-server shutdown >nul 2>&1
 if exist "bin" rmdir /s /q "bin"
 if exist "obj" rmdir /s /q "obj"
-if exist "publish\*.pdb" del /q "publish\*.pdb"
+if exist "%DEPLOY%\*.pdb" del /q "%DEPLOY%\*.pdb"
 
 echo.
-echo === BUILD OK: publish\FocusClip.exe ===
+echo === BUILD OK: %DEPLOY%\FocusClip.exe ===
 
 echo === Refreshing icon cache (no Explorer restart) ===
-ie4uinit.exe -show
+"%SystemRoot%\System32\ie4uinit.exe" -show >nul 2>&1
 
 echo === Launching FocusClip ===
-start "" "%~dp0publish\FocusClip.exe"
+start "" "%DEPLOY%\FocusClip.exe"
 
 echo.
 pause

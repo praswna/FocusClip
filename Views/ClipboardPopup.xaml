@@ -9,8 +9,11 @@
         Topmost="True"
         ResizeMode="NoResize"
         SizeToContent="Height"
-        Width="230" MinWidth="170" MinHeight="120">
+        Width="250" MinWidth="190" MinHeight="120">
     <Window.Resources>
+        <!-- 팝업 스크롤바를 다크 테마로(ScrollViewer 내부 스크롤바에 암시적 적용) -->
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource DarkScrollBar}"/>
+
         <!-- 카드 삭제(✕) 버튼: 평평, 호버 시 빨강 -->
         <Style x:Key="CardX" TargetType="Button">
             <Setter Property="Width" Value="18"/>
@@ -141,11 +144,28 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
+            <!-- 핀 고정 시에만 보이는 이동 핸들(드래그하여 팝업 이동) -->
+            <Thumb x:Name="MoveHandle" Grid.Row="0" Height="12" Visibility="Collapsed"
+                   Cursor="SizeAll" Margin="0,0,0,3" DragDelta="MoveHandle_DragDelta"
+                   ToolTip="드래그하여 이동">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent">
+                            <Rectangle Width="40" Height="3" RadiusX="1.5" RadiusY="1.5"
+                                       Fill="{StaticResource GrayBrush}" Opacity="0.6"/>
+                        </Border>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+
             <!-- 헤더: 필터 세그먼트(전체/텍스트/이미지) + 팝업 핀 토글 -->
-            <Grid Grid.Row="0" Height="20" Margin="0,0,0,4">
+            <Grid Grid.Row="1" Height="20" Margin="0,0,0,4">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="클립보드" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"
+                               FontSize="10" VerticalAlignment="Center" Margin="2,0,8,0"/>
                     <RadioButton x:Name="FilterAll" Style="{StaticResource SegBtn}" GroupName="ClipFilter"
                                  Content="전체" IsChecked="True" Checked="Filter_All_Checked"/>
                     <RadioButton x:Name="FilterText" Style="{StaticResource SegBtn}" GroupName="ClipFilter"
@@ -163,12 +183,14 @@
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
                             <Border x:Name="pb" Background="Transparent" CornerRadius="9">
-                                <TextBlock Text="📌" FontSize="11" HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" Opacity="0.5"/>
+                                <TextBlock x:Name="pin" Text="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{StaticResource AccentBrush}"/>
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsChecked" Value="True">
                                     <Setter TargetName="pb" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    <Setter TargetName="pin" Property="Foreground" Value="White"/>
                                 </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter TargetName="pb" Property="Background" Value="{StaticResource Bg3Brush}"/>
@@ -179,7 +201,7 @@
                 </ToggleButton>
             </Grid>
 
-            <ScrollViewer Grid.Row="1" x:Name="Scroller" VerticalScrollBarVisibility="Auto" MaxHeight="320"
+            <ScrollViewer Grid.Row="2" x:Name="Scroller" VerticalScrollBarVisibility="Auto" MaxHeight="320"
                           PreviewMouseWheel="Scroller_PreviewMouseWheel">
                 <ItemsControl x:Name="ClipList">
                     <ItemsControl.ItemTemplate>

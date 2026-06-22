@@ -24,6 +24,8 @@ public partial class LauncherDock : Window
     public event Action<int>? PinnedCountChanged;
     /// <summary>[+] 버튼 클릭 → 설정 열기 요청(FM의 + 버튼).</summary>
     public event Action? AddRequested;
+    /// <summary>[✕] 버튼 클릭 → 프로그램 종료 요청.</summary>
+    public event Action? ExitRequested;
 
     private const double SepGapPx = 8; // 구분선 좌우 여백(경계 컨테이너 좌측 여백)
 
@@ -45,13 +47,25 @@ public partial class LauncherDock : Window
     {
         _apps = apps as ObservableCollection<AppEntry>;
         AppList.ItemsSource = apps;
+        // 추가/제거/순서변경 시 숫자키 라벨 재계산(설정 창이 같은 컬렉션을 직접 수정함).
+        if (_apps != null) _apps.CollectionChanged += (_, _) => UpdateHotkeyLabels();
+        UpdateHotkeyLabels();
     }
 
-    /// <summary>고정구간 개수 설정 → 구분선 위치 갱신(F2 변경 즉시 반영).</summary>
+    /// <summary>고정구간 개수 설정 → 구분선 위치 + 숫자키 라벨 갱신(F2 변경 즉시 반영).</summary>
     public void SetPinnedCount(int n)
     {
         _pinnedCount = n;
         UpdateSeparator();
+        UpdateHotkeyLabels();
+    }
+
+    /// <summary>고정구간(앞 PinnedCount개, 최대 9) 앱에 숫자키 라벨 "1"~"9"를 부여하고 나머지는 비운다.</summary>
+    private void UpdateHotkeyLabels()
+    {
+        if (_apps == null) return;
+        for (int i = 0; i < _apps.Count; i++)
+            _apps[i].HotkeyLabel = (i < _pinnedCount && i < 9) ? (i + 1).ToString() : "";
     }
 
     /// <summary>고정 N개 뒤에 세로 구분선 배치(FM sepLine). 0<N<앱수 일 때만 표시.</summary>
@@ -105,6 +119,7 @@ public partial class LauncherDock : Window
     // ── F1: 드래그 시작 ──
     private void AppButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        _justDragged = false; // 새 누름마다 초기화 — 직전 드래그(제거 등)로 남은 플래그가 다음 클릭을 먹지 않게
         _dragStart = e.GetPosition(null);
         _dragItem = (sender as FrameworkElement)?.Tag as AppEntry;
     }
@@ -159,12 +174,15 @@ public partial class LauncherDock : Window
                     PinnedCountChanged?.Invoke(_pinnedCount);
                     UpdateSeparator();
                 }
+                UpdateHotkeyLabels(); // 순서/고정구간 변동 → 번호 재부여
                 AppsReordered?.Invoke();
             }
         }
     }
 
     private void AddButton_Click(object sender, RoutedEventArgs e) => AddRequested?.Invoke();
+
+    private void ExitButton_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke();
 
     // 도크 배경에 드롭 = 순서 유지(제거 방지). Move 로 처리해 None 이 되지 않게 한다.
     private void Surface_DragOver(object sender, DragEventArgs e)
@@ -207,7 +225,7 @@ public partial class LauncherDock : Window
             catch { }
             double cx = p.X / sx, cy = p.Y / sy;
 
-            var wa = SystemParameters.WorkArea;
+            var wa = ScreenUtil.WorkAreaDipFromPhysical(p.X, p.Y, this); // 커서가 있는 모니터 기준
             double left = Math.Min(cx, wa.Right - ActualWidth);
             double top = cy - ActualHeight; // 커서 위쪽에 표시(FM과 동일)
             Left = Math.Max(wa.Left, left);
