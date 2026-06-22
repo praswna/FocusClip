@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -18,7 +18,8 @@ namespace FocusClip.Services;
 /// </summary>
 public sealed class IconService
 {
-    private readonly Dictionary<string, ImageSource> _cache = new();
+    // 백그라운드(LoadIconsAsync)와 UI 스레드(설정창)에서 동시 접근될 수 있어 ConcurrentDictionary 사용.
+    private readonly ConcurrentDictionary<string, ImageSource> _cache = new();
     private static string CacheDir { get; } = Path.Combine(ConfigService.Dir, "icons");
 
     public ImageSource? GetIcon(AppEntry app, int size = 32)

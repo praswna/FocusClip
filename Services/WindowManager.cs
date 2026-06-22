@@ -30,6 +30,24 @@ public sealed class WindowManager
         return !isTop;
     }
 
+    /// <summary>대상 창을 닫는다(WM_CLOSE — 앱에 정상 종료 요청). 창이 없으면 false.</summary>
+    public bool CloseWindow(AppEntry app)
+    {
+        IntPtr h = FindMainWindow(app);
+        if (h == IntPtr.Zero) return false;
+        NativeMethods.PostMessage(h, NativeMethods.WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+        return true;
+    }
+
+    /// <summary>대상 창을 최소화한다. 창이 없으면 false.</summary>
+    public bool MinimizeWindow(AppEntry app)
+    {
+        IntPtr h = FindMainWindow(app);
+        if (h == IntPtr.Zero) return false;
+        NativeMethods.ShowWindow(h, NativeMethods.SW_MINIMIZE);
+        return true;
+    }
+
     private static IntPtr FindMainWindow(AppEntry app)
     {
         string nameNoExe = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)

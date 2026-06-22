@@ -40,6 +40,8 @@
         <StackPanel Grid.Row="0" Margin="2,0,0,10">
             <CheckBox x:Name="StartupCheck" Content="윈도우 시작 시 자동 실행"
                       Foreground="White" Margin="0,0,0,8"/>
+            <CheckBox x:Name="SidebarCheck" Content="왼쪽 사이드바 표시"
+                      Foreground="White" Margin="0,0,0,8"/>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <TextBlock Text="단축키" VerticalAlignment="Center" Width="64"/>
                 <Button x:Name="HotkeyButton" Content="CapsLock" Width="150"
@@ -55,6 +57,36 @@
                 <TextBlock Text="사이드바·숫자키 대상 앱 수" Foreground="{StaticResource GrayBrush}"
                            VerticalAlignment="Center" Margin="10,0,0,0"/>
             </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="우클릭" VerticalAlignment="Center" Width="64"/>
+                <RadioButton x:Name="RcTop" Tag="AlwaysOnTop" Content="항상 위" GroupName="Rc"
+                             Foreground="White" VerticalAlignment="Center" Margin="0,0,12,0" Checked="RightClick_Changed"/>
+                <RadioButton x:Name="RcClose" Tag="Close" Content="창 닫기" GroupName="Rc"
+                             Foreground="White" VerticalAlignment="Center" Margin="0,0,12,0" Checked="RightClick_Changed"/>
+                <RadioButton x:Name="RcMin" Tag="Minimize" Content="최소화" GroupName="Rc"
+                             Foreground="White" VerticalAlignment="Center" Margin="0,0,12,0" Checked="RightClick_Changed"/>
+                <RadioButton x:Name="RcNone" Tag="None" Content="없음" GroupName="Rc"
+                             Foreground="White" VerticalAlignment="Center" Checked="RightClick_Changed"/>
+            </StackPanel>
+
+            <DockPanel Margin="0,8,0,0" LastChildFill="True">
+                <TextBlock Text="폴더 열기" VerticalAlignment="Center" Width="64" DockPanel.Dock="Left"/>
+                <Button Content="찾아보기" DockPanel.Dock="Right" Click="BrowseFileManager_Click" Padding="8,2"/>
+                <Button Content="기본값" DockPanel.Dock="Right" Click="ClearFileManager_Click" Padding="8,2" Margin="0,0,4,0"/>
+                <TextBox x:Name="FileManagerBox" Background="{StaticResource Bg2Brush}" Foreground="White"
+                         BorderBrush="{StaticResource LineBrush}" Padding="4,2" VerticalContentAlignment="Center"
+                         Margin="0,0,6,0" TextChanged="FileManagerBox_TextChanged"
+                         ToolTip="비우면 기본 탐색기. Q-Dir 등 파일 관리자 exe 경로를 지정하면 폴더를 그 프로그램으로 엽니다."/>
+            </DockPanel>
+
+            <DockPanel Margin="0,4,0,0" LastChildFill="True">
+                <TextBlock Text="실행 인자" VerticalAlignment="Center" Width="64" DockPanel.Dock="Left"/>
+                <TextBox x:Name="FileManagerArgsBox" Background="{StaticResource Bg2Brush}" Foreground="White"
+                         BorderBrush="{StaticResource LineBrush}" Padding="4,2" VerticalContentAlignment="Center"
+                         TextChanged="FileManagerArgsBox_TextChanged"
+                         ToolTip="파일 관리자 실행 인자. %path% 가 폴더 경로로 치환됩니다. 기본: &quot;%path%&quot;"/>
+            </DockPanel>
         </StackPanel>
 
         <Grid Grid.Row="1">
@@ -80,10 +112,18 @@
                      ItemTemplate="{StaticResource AppItem}"/>
         </Grid>
 
-        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
-            <Button Content="◀ 선택 추가" Click="Add_Click"/>
-            <Button Content="선택 제거" Click="Remove_Click"/>
-            <Button Content="닫기" Click="Close_Click"/>
-        </StackPanel>
+        <DockPanel Grid.Row="3" Margin="0,12,0,0" LastChildFill="False">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                <Button Content="📁 Config 폴더" Click="OpenConfig_Click"
+                        ToolTip="설정·클립 데이터 폴더 열기 (%LOCALAPPDATA%\FocusClip)"/>
+                <Button Content="☕ 후원하기" Click="Kofi_Click"
+                        ToolTip="Ko-fi에서 개발 후원하기 (ko-fi.com/praswna)"/>
+            </StackPanel>
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Content="◀ 선택 추가" Click="Add_Click"/>
+                <Button Content="선택 제거" Click="Remove_Click"/>
+                <Button Content="닫기" Click="Close_Click"/>
+            </StackPanel>
+        </DockPanel>
     </Grid>
 </Window>

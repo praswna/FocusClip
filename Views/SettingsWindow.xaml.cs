@@ -21,6 +21,8 @@ public partial class SettingsWindow : Window
     private readonly ObservableCollection<AppEntry> _running = new();
     private bool _capturingHotkey;
     private bool _suppressPinned;
+    private bool _suppressRc;
+    private bool _suppressFm;
 
     public SettingsWindow(ConfigService cfg, IconService icons,
         ObservableCollection<AppEntry> registered, Action onChanged,
@@ -40,10 +42,29 @@ public partial class SettingsWindow : Window
         StartupCheck.Checked += (_, _) => StartupService.SetEnabled(true);
         StartupCheck.Unchecked += (_, _) => StartupService.SetEnabled(false);
 
+        SidebarCheck.IsChecked = _cfg.Config.SidebarEnabled;
+        SidebarCheck.Checked += (_, _) => { _cfg.Config.SidebarEnabled = true; _cfg.Save(); _onChanged(); };
+        SidebarCheck.Unchecked += (_, _) => { _cfg.Config.SidebarEnabled = false; _cfg.Save(); _onChanged(); };
+
         HotkeyButton.Content = VkName(_cfg.Config.HotkeyVk);
         _suppressPinned = true;
         PinnedBox.Text = _cfg.Config.PinnedCount.ToString();
         _suppressPinned = false;
+
+        _suppressRc = true;
+        (_cfg.Config.RightClickAction switch
+        {
+            DockRightClickAction.Close => RcClose,
+            DockRightClickAction.Minimize => RcMin,
+            DockRightClickAction.None => RcNone,
+            _ => RcTop,
+        }).IsChecked = true;
+        _suppressRc = false;
+
+        _suppressFm = true;
+        FileManagerBox.Text = _cfg.Config.FileManagerPath;
+        FileManagerArgsBox.Text = _cfg.Config.FileManagerArgs;
+        _suppressFm = false;
 
         PreviewKeyDown += SettingsWindow_PreviewKeyDown;
 
@@ -105,6 +126,46 @@ public partial class SettingsWindow : Window
         >= 0x30 and <= 0x39 => ((char)vk).ToString(),    // 0~9
         _ => $"VK 0x{vk:X2}",
     };
+
+    // ── 폴더 열기 프로그램(파일 관리자) ──
+    private void FileManagerBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_suppressFm) return;
+        _cfg.Config.FileManagerPath = FileManagerBox.Text.Trim();
+        _cfg.Save();
+    }
+
+    private void FileManagerArgsBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_suppressFm) return;
+        _cfg.Config.FileManagerArgs = FileManagerArgsBox.Text;
+        _cfg.Save();
+    }
+
+    private void BrowseFileManager_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "폴더를 열 프로그램 선택",
+            Filter = "실행 파일 (*.exe)|*.exe|모든 파일 (*.*)|*.*",
+            CheckFileExists = true,
+        };
+        if (dlg.ShowDialog(this) == true) FileManagerBox.Text = dlg.FileName; // TextChanged가 저장
+    }
+
+    private void ClearFileManager_Click(object sender, RoutedEventArgs e) => FileManagerBox.Text = "";
+
+    // ── 아이콘 우클릭 동작 ──
+    private void RightClick_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressRc) return;
+        if (sender is FrameworkElement fe && fe.Tag is string s
+            && Enum.TryParse<DockRightClickAction>(s, out var act))
+        {
+            _cfg.Config.RightClickAction = act;
+            _cfg.Save();
+        }
+    }
 
     // ── F2: 고정 개수 ──
     private void PinnedBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
@@ -190,4 +251,26 @@ public partial class SettingsWindow : Window
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshRunning();
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    // ── Config(데이터) 폴더 열기 ── 설정된 파일 관리자(Q-Dir 등)가 있으면 그것으로, 없으면 기본 탐색기.
+    private void OpenConfig_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string dir = ConfigService.Dir;
+            System.IO.Directory.CreateDirectory(dir);
+            FolderLauncher.OpenFolder(dir, _cfg.Config.FileManagerPath, _cfg.Config.FileManagerArgs);
+        }
+        catch { }
+    }
+
+    // ── Ko-fi 후원 링크 ──
+    private void Kofi_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("https://ko-fi.com/praswna") { UseShellExecute = true });
+        }
+        catch { /* 브라우저 열기 실패는 무시 */ }
+    }
 }

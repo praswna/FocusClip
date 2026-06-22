@@ -60,6 +60,22 @@
                             ToolTip="{Binding Name}">
                         <Grid Width="24" Height="29">
                             <Image Source="{Binding Icon}" Width="24" Height="24" VerticalAlignment="Top"/>
+                            <!-- 단축키 번호(고정구간 1~9): 아이콘 좌상단 모서리에 아주 작게 -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="#CC000000" CornerRadius="3" Padding="2,0" Margin="-2,-2,0,0">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HotkeyLabel}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="{Binding HotkeyLabel}" FontSize="8" FontWeight="Bold"
+                                           Foreground="White" LineHeight="10" LineStackingStrategy="BlockLineHeight"/>
+                            </Border>
                             <!-- 활성 표시등 -->
                             <Rectangle Height="2.5" Width="20" RadiusX="1.25" RadiusY="1.25"
                                        VerticalAlignment="Bottom">
@@ -85,12 +101,25 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- [+] 앱 추가(설정 열기) — FM의 + 버튼 재현 -->
+        <!-- [+] 앱 추가(설정 열기) — FM의 + 버튼 재현. ✕와 획 두께·중심을 맞추려고 Path 선으로 그림. -->
         <Button x:Name="AddButton" Style="{StaticResource IconButton}"
                 Click="AddButton_Click" ToolTip="앱 추가" VerticalAlignment="Stretch">
             <Grid Width="24" Height="29">
-                <TextBlock Text="+" Foreground="White" FontSize="22" FontFamily="Segoe UI"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
+                <Path Stroke="White" StrokeThickness="2"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Data="M 0,6 H 12 M 6,0 V 12"/>
+            </Grid>
+        </Button>
+
+        <!-- [✕] 프로그램 종료 — +와 동일한 StrokeThickness/중심. -->
+        <Button x:Name="ExitButton" Style="{StaticResource IconButton}"
+                Click="ExitButton_Click" ToolTip="프로그램 종료" VerticalAlignment="Stretch">
+            <Grid Width="24" Height="29">
+                <Path Stroke="White" StrokeThickness="2"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Data="M 0,0 L 11,11 M 11,0 L 0,11"/>
             </Grid>
         </Button>
         </StackPanel>

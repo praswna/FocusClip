@@ -26,6 +26,7 @@ public partial class ClipboardPopup : Window
     public event Action<ClipItem>? ClipEditRequested; // C4/C5: 카드 우클릭 편집
     public event Action<ClipItem>? ClipOpenRequested; // 저장된 본문 파일 위치 열기
     public event Action? OpenFolderRequested;         // 헤더 파일 수 클릭 → 저장 폴더 열기
+    public event Action? PinChanged;                  // 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
     public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>C1: 팝업 핀(자동 닫힘 해제). true면 앱 활성화/클립 선택에도 닫지 않음.</summary>
@@ -163,7 +164,19 @@ public partial class ClipboardPopup : Window
     }
 
     private void PinToggle_Changed(object sender, RoutedEventArgs e)
-        => Pinned = PinToggle.IsChecked == true;
+    {
+        Pinned = PinToggle.IsChecked == true;
+        MoveHandle.Visibility = Pinned ? Visibility.Visible : Visibility.Collapsed; // 핀 시 이동 핸들 표시
+        PinChanged?.Invoke();
+    }
+
+    // ── 이동 핸들: 핀된 팝업을 드래그로 옮긴다(작업영역 안으로 클램프) ──
+    private void MoveHandle_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        var wa = ScreenUtil.WorkAreaDip(this);
+        Left = Math.Max(wa.Left, Math.Min(wa.Right - ActualWidth, Left + e.HorizontalChange));
+        Top = Math.Max(wa.Top, Math.Min(wa.Bottom - ActualHeight, Top + e.VerticalChange));
+    }
 
     // ── 스크롤: 휠로 직접 스크롤(무활성 창에서도 확실히 동작) ──
     private void Scroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -202,7 +215,8 @@ public partial class ClipboardPopup : Window
         System.Threading.Tasks.Task.Run(() =>
         {
             int n = 0;
-            try { if (System.IO.Directory.Exists(dir)) n = System.IO.Directory.EnumerateFiles(dir).Count(); }
+            // text·image 하위 폴더까지 포함해 전체 저장 파일 수를 센다(분리 저장 대응).
+            try { if (System.IO.Directory.Exists(dir)) n = System.IO.Directory.EnumerateFiles(dir, "*", System.IO.SearchOption.AllDirectories).Count(); }
             catch { }
             Dispatcher.BeginInvoke(() => FolderCount.Text = $"📁 {n}");
         });
@@ -218,8 +232,10 @@ public partial class ClipboardPopup : Window
     public void ShowAbove(Window anchor)
     {
         UpdateFolderCount();
+        bool wasVisible = IsVisible;
         Show();
-        var wa = SystemParameters.WorkArea;
+        if (Pinned && wasVisible) return; // 핀+이미 표시 중이면 사용자가 옮긴 위치 유지(재배치 안 함)
+        var wa = ScreenUtil.WorkAreaDip(anchor); // 도크가 놓인 모니터 기준(멀티모니터)
         double left = Math.Min(anchor.Left, wa.Right - ActualWidth);
         Left = Math.Max(wa.Left, left);
         double top = anchor.Top - ActualHeight - 6;

@@ -27,7 +27,10 @@ public sealed class ClipboardService : IDisposable
     // 모든 앱 데이터는 ConfigService.Dir(=%LOCALAPPDATA%\FocusClip) 한 곳에 모은다.
     // 클립 본문은 용량이 크고 자주 생성·삭제되므로 OneDrive·로밍 비대상인 Local 에 둬야
     // 디하이드레이트(클라우드 전용)로 드래그/열기가 느려지지 않는다.
+    // 저장 루트(media) 아래 텍스트/이미지를 분리 보관. SaveDir은 '열기' 대상(부모) 및 호환용으로 유지.
     public static string SaveDir { get; } = Path.Combine(ConfigService.Dir, "media");
+    public static string TextDir { get; } = Path.Combine(SaveDir, "text");
+    public static string ImageDir { get; } = Path.Combine(SaveDir, "image");
     private static readonly string HistoryPath = Path.Combine(ConfigService.Dir, "clips.json");
 
     public ObservableCollection<ClipItem> Items { get; } = new();
@@ -136,6 +139,23 @@ public sealed class ClipboardService : IDisposable
         var item = new ClipItem { IsPath = true, Text = path, Hash = hash };
         Insert(Paths, item);
         SaveTextAsync(item, path); // 디스크 쓰기는 백그라운드(UI 비블로킹). Text는 메모리에 있어 즉시 사용 가능
+        RefreshPathExists(item);   // 존재 여부도 백그라운드에서 검사해 갱신
+    }
+
+    /// <summary>경로 존재 여부를 백그라운드에서 검사해 item.PathExists를 갱신(UI 스레드 디스크 I/O 회피).</summary>
+    private static void RefreshPathExists(ClipItem item)
+    {
+        Task.Run(() =>
+        {
+            bool ok = item.CheckPathExists();
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() => item.PathExists = ok);
+        });
+    }
+
+    /// <summary>모든 경로 항목의 존재 여부를 백그라운드로 재검사(팝업 표시 직전 호출 → 세션 중 삭제 반영).</summary>
+    public void RefreshPathExistsAll()
+    {
+        foreach (var item in Paths) RefreshPathExists(item);
     }
 
     /// <summary>dedup용 경로 정규화. 로컬은 슬래시 통일+소문자, URL은 후행 슬래시만 정리.</summary>
@@ -166,14 +186,14 @@ public sealed class ClipboardService : IDisposable
         });
     }
 
-    /// <summary>텍스트/경로 클립을 SaveDir에 .txt 파일로 저장(이미지 PNG와 같은 폴더). 실패 시 null(인메모리 Text로만 유지).</summary>
+    /// <summary>텍스트/경로 클립을 TextDir(media\text)에 .txt 파일로 저장. 실패 시 null(인메모리 Text로만 유지).</summary>
     private static string? TrySaveTextFile(string text)
     {
         try
         {
-            Directory.CreateDirectory(SaveDir);
+            Directory.CreateDirectory(TextDir);
             string name = $"clip_{DateTime.Now:yyyyMMdd_HHmmss_fff}_{Guid.NewGuid().ToString("N")[..6]}.txt";
-            string path = Path.Combine(SaveDir, name);
+            string path = Path.Combine(TextDir, name);
             File.WriteAllText(path, text);
             return path;
         }
@@ -272,23 +292,25 @@ public sealed class ClipboardService : IDisposable
         ScheduleSave();
     }
 
-    /// <summary>카드 핀 토글: 핀이면 최상단으로, 핀 해제면 핀 구간 바로 아래로 이동.</summary>
+    /// <summary>카드 핀 토글: 핀이면 최상단으로, 핀 해제면 핀 구간 바로 아래로 이동.
+    /// 항목이 속한 컬렉션(Items 또는 Paths)을 자동 판별해 양쪽 팝업에서 동작한다.</summary>
     public void TogglePin(ClipItem item)
     {
-        if (Items.IndexOf(item) < 0) return;
+        var col = Items.Contains(item) ? Items : Paths.Contains(item) ? Paths : null;
+        if (col == null) return;
         if (!item.Pinned)
         {
             item.Pinned = true;
-            int cur = Items.IndexOf(item);
-            if (cur != 0) Items.Move(cur, 0);          // 최상단으로
+            int cur = col.IndexOf(item);
+            if (cur != 0) col.Move(cur, 0);            // 최상단으로
         }
         else
         {
             item.Pinned = false;
-            int remainingPinned = Items.Count(c => c.Pinned); // 이 항목 제외(이미 false)
-            int target = Math.Min(remainingPinned, Items.Count - 1);
-            int cur = Items.IndexOf(item);
-            if (cur != target) Items.Move(cur, target); // 남은 핀 구간 바로 아래로
+            int remainingPinned = col.Count(c => c.Pinned); // 이 항목 제외(이미 false)
+            int target = Math.Min(remainingPinned, col.Count - 1);
+            int cur = col.IndexOf(item);
+            if (cur != target) col.Move(cur, target);  // 남은 핀 구간 바로 아래로
         }
         ScheduleSave();
     }
@@ -385,8 +407,8 @@ public sealed class ClipboardService : IDisposable
 
     private static string SaveImage(BitmapSource bmp)
     {
-        Directory.CreateDirectory(SaveDir);
-        string path = Path.Combine(SaveDir, $"clip_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
+        Directory.CreateDirectory(ImageDir);
+        string path = Path.Combine(ImageDir, $"clip_{DateTime.Now:yyyyMMdd_HHmmss_fff}.png");
         var enc = new PngBitmapEncoder();
         enc.Frames.Add(BitmapFrame.Create(bmp));
         using var fs = File.Create(path);
@@ -448,7 +470,9 @@ public sealed class ClipboardService : IDisposable
             {
                 string text = ReadTextRecord(r);
                 if (string.IsNullOrEmpty(text)) continue;
-                Paths.Add(new ClipItem { IsPath = true, Text = text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time, FilePath = r.FilePath });
+                var item = new ClipItem { IsPath = true, Text = text, Hash = r.Hash, Pinned = r.Pinned, Time = r.Time, FilePath = r.FilePath };
+                Paths.Add(item);
+                RefreshPathExists(item);
             }
         }
         catch { }

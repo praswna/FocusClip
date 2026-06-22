@@ -51,6 +51,9 @@ public sealed class HotkeyService : IDisposable
         {
             int msg = wParam.ToInt32();
             var data = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
+            // 우리가 합성한 CapsLock 토글(클릭으로 대소문자 전환)은 단축키로 처리하지 않고 그대로 통과시킨다.
+            if (data.dwExtraInfo.ToInt64() == NativeMethods.CAPS_SYNTH_TAG)
+                return NativeMethods.CallNextHookEx(_hookId, nCode, wParam, lParam);
             bool down = msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN;
             bool up = msg == NativeMethods.WM_KEYUP || msg == NativeMethods.WM_SYSKEYUP;
 
