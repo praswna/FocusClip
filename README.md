@@ -1,3 +1,5 @@
+<p align="center"><img src="icon.png" width="100" alt="FocusClip"></p>
+
 # FocusClip
 
 여러 프로그램을 오가며 작업할 때 **앱 전환**과 **클립보드**를 한 번에 빠르게 다루는 Windows 트레이 유틸리티.
