@@ -12,6 +12,15 @@ C# / .NET 8 / WPF로 작성, 단일 EXE로 배포된다(.NET 8 Runtime 필요).
 </p>
 <p align="center"><sub>왼쪽부터 — 고정 앱 <b>사이드바</b> · <b>클립보드 팝업</b>+<b>도크</b>+<b>경로 팝업</b> · <b>설정 창</b></sub></p>
 
+## 다운로드
+
+[![최신 릴리스](https://img.shields.io/github/v/release/praswna/FocusClip?label=latest&sort=semver)](https://github.com/praswna/FocusClip/releases/latest)
+
+- ⬇️ **[FocusClip-Standalone.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip-Standalone.exe)** — .NET 설치 불필요, 단독 실행 (대부분 이걸 받으세요)
+- ⬇️ **[FocusClip.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip.exe)** — 경량(~0.5 MB), .NET 8 Runtime 필요
+
+> 위 링크는 항상 **최신 릴리스**를 받습니다 · 전체 버전: [Releases](https://github.com/praswna/FocusClip/releases) · Windows 10/11 x64
+
 ## 왜 만들었나
 
 3D·그래픽 작업은 보통 한 프로그램이 아니라 **여러 CG 도구(3ds Max, Maya, Blender, Photoshop, Substance, ZBrush …)를 계속 오가며** 진행된다. 그 과정에서 생기는 두 가지 마찰을 줄이려고 만들었다.
