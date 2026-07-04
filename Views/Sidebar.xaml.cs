@@ -16,11 +16,30 @@ public partial class Sidebar : Window
     public event Action<AppEntry>? AppRightClicked;
 
     private bool _userMovedY; // 사용자가 핸들로 세로 위치를 옮겼는지(이후 자동 센터링 안 함)
+    private IntPtr _hwnd;
+    private IntPtr _winEventHook;
+    private NativeMethods.WinEventDelegate? _winEventProc; // GC 방지용 참조 유지
 
     public Sidebar()
     {
         InitializeComponent();
         Loaded += (_, _) => PositionLeftCenter();
+    }
+
+    // WPF Topmost=True 만으로는 다른 앱이 새로 뜨면서 자기 창을 topmost 로 올리면 밀린다.
+    // 포그라운드 창이 바뀌는 순간(다른 앱 실행/전환)에만 HWND_TOPMOST 를 다시 걸어 최상단 보장.
+    private void OnForegroundChanged(IntPtr hook, uint ev, IntPtr hwnd,
+        int idObject, int idChild, uint thread, uint time)
+    {
+        if (hwnd == _hwnd) return; // 사이드바 자신이면 무시
+        ReassertTopmost();
+    }
+
+    private void ReassertTopmost()
+    {
+        if (_hwnd == IntPtr.Zero || !IsVisible) return;
+        NativeMethods.SetWindowPos(_hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
     }
 
     // ── FM의 ::: 핸들: 세로(Y)만 이동 ──
@@ -51,7 +70,26 @@ public partial class Sidebar : Window
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        NativeMethods.MakeNoActivateToolWindow(new WindowInteropHelper(this).Handle);
+        _hwnd = new WindowInteropHelper(this).Handle;
+        NativeMethods.MakeNoActivateToolWindow(_hwnd);
+        ReassertTopmost();
+
+        // 포그라운드 변경 이벤트만 구독(폴링 없음). SKIPOWNPROCESS 로 자기 프로세스 이벤트는 제외.
+        _winEventProc = OnForegroundChanged;
+        _winEventHook = NativeMethods.SetWinEventHook(
+            NativeMethods.EVENT_SYSTEM_FOREGROUND, NativeMethods.EVENT_SYSTEM_FOREGROUND,
+            IntPtr.Zero, _winEventProc, 0, 0,
+            NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_winEventHook != IntPtr.Zero)
+        {
+            NativeMethods.UnhookWinEvent(_winEventHook);
+            _winEventHook = IntPtr.Zero;
+        }
+        base.OnClosed(e);
     }
 
     public void PositionLeftCenter()

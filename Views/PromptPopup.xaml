@@ -1,0 +1,182 @@
+<Window x:Class="FocusClip.Views.PromptPopup"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        SizeToContent="Height"
+        Width="250" MinWidth="190" MinHeight="70">
+    <Window.Resources>
+        <!-- 팝업 스크롤바를 다크 테마로(ScrollViewer 내부 스크롤바에 암시적 적용) -->
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource DarkScrollBar}"/>
+
+        <!-- 카드 편집(✎) 버튼: 호버 시 액센트 -->
+        <Style x:Key="CardEdit" TargetType="Button">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="9">
+                            <TextBlock Text="✎" FontSize="11" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 카드 삭제(✕) 버튼: 평평, 호버 시 빨강 -->
+        <Style x:Key="CardX" TargetType="Button">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="9">
+                            <TextBlock Text="✕" FontSize="10" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#66FF3B30"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 헤더 추가(+) 버튼: 호버 시 액센트 -->
+        <Style x:Key="AddBtn" TargetType="Button">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="4">
+                            <TextBlock Text="＋" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{StaticResource BgBrush}"
+            BorderBrush="{StaticResource NeonBrush}"
+            BorderThickness="1"
+            CornerRadius="6"
+            Padding="6">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 핀 고정 시에만 보이는 이동 핸들(드래그하여 팝업 이동) -->
+            <Thumb x:Name="MoveHandle" Grid.Row="0" Height="12" Visibility="Collapsed"
+                   Cursor="SizeAll" Margin="0,0,0,3" DragDelta="MoveHandle_DragDelta"
+                   ToolTip="드래그하여 이동">
+                <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent">
+                            <Rectangle Width="40" Height="3" RadiusX="1.5" RadiusY="1.5"
+                                       Fill="{StaticResource GrayBrush}" Opacity="0.6"/>
+                        </Border>
+                    </ControlTemplate>
+                </Thumb.Template>
+            </Thumb>
+
+            <!-- 헤더: 제목 + 추가(+) + 팝업 핀 토글 -->
+            <Grid Grid.Row="1" Height="20" Margin="0,0,0,4">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <TextBlock Text="프롬프트" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"
+                               FontSize="10" VerticalAlignment="Center" Margin="2,0,6,0"/>
+                    <Button x:Name="AddButton" Style="{StaticResource AddBtn}" Click="Add_Click"
+                            ToolTip="프롬프트 추가"/>
+                </StackPanel>
+                <ToggleButton x:Name="PinToggle" HorizontalAlignment="Right" VerticalAlignment="Center"
+                              Width="20" Height="18" Cursor="Hand" ToolTip="팝업 고정(자동 닫힘 해제)"
+                              Checked="PinToggle_Changed" Unchecked="PinToggle_Changed">
+                    <ToggleButton.Template>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="pb" Background="Transparent" CornerRadius="9">
+                                <TextBlock x:Name="pin" Text="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Foreground="{StaticResource AccentBrush}"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="pb" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                    <Setter TargetName="pin" Property="Foreground" Value="White"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="pb" Property="Background" Value="{StaticResource Bg3Brush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </ToggleButton.Template>
+                </ToggleButton>
+            </Grid>
+
+            <ScrollViewer Grid.Row="2" x:Name="Scroller" VerticalScrollBarVisibility="Auto" MaxHeight="320"
+                          PreviewMouseWheel="Scroller_PreviewMouseWheel">
+                <ItemsControl x:Name="PromptList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
+                                    Background="{StaticResource Bg2Brush}"
+                                    PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="Card_PreviewMouseMove"
+                                    MouseLeftButtonUp="Card_Click"
+                                    Tag="{Binding}"
+                                    ToolTip="{Binding Text}">
+                                <Grid>
+                                    <StackPanel Margin="0,0,22,0">
+                                        <TextBlock Text="{Binding DisplayTitle}" Foreground="#FFDDDDDD"
+                                                   FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Preview}" Foreground="{StaticResource GrayBrush}"
+                                                   FontSize="10" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Vertical"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top">
+                                        <Button Style="{StaticResource CardEdit}" Click="Edit_Click"
+                                                Tag="{Binding}" ToolTip="편집"/>
+                                        <Button Style="{StaticResource CardX}" Click="Delete_Click"
+                                                Tag="{Binding}" ToolTip="삭제"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </Border>
+</Window>

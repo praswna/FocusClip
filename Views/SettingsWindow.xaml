@@ -42,9 +42,6 @@
                       Foreground="White" Margin="0,0,0,8"/>
             <CheckBox x:Name="SidebarCheck" Content="왼쪽 사이드바 표시"
                       Foreground="White" Margin="0,0,0,8"/>
-            <CheckBox x:Name="MemoryOnlyCheck" Content="메모리에만 보관 (디스크에 저장 안 함 · 보안)"
-                      Foreground="White" Margin="0,0,0,8"
-                      ToolTip="켜면 클립 텍스트·이미지와 기록(clips.json)을 디스크에 저장하지 않고 메모리에만 둡니다. 앱을 끄면 기록이 사라집니다."/>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <TextBlock Text="단축키" VerticalAlignment="Center" Width="64"/>
                 <Button x:Name="HotkeyButton" Content="CapsLock" Width="150"
@@ -110,9 +107,14 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <ListBox x:Name="RegisteredList" Grid.Column="0" Margin="0,0,3,0"
-                     ItemTemplate="{StaticResource AppItem}"/>
+                     ItemTemplate="{StaticResource AppItem}"
+                     AllowDrop="True"
+                     Drop="RegisteredList_Drop"
+                     DragOver="RegisteredList_DragOver"/>
             <ListBox x:Name="RunningList" Grid.Column="1" Margin="3,0,0,0"
-                     ItemTemplate="{StaticResource AppItem}"/>
+                     ItemTemplate="{StaticResource AppItem}"
+                     PreviewMouseLeftButtonDown="RunningList_MouseDown"
+                     PreviewMouseMove="RunningList_MouseMove"/>
         </Grid>
 
         <DockPanel Grid.Row="3" Margin="0,12,0,0" LastChildFill="False">

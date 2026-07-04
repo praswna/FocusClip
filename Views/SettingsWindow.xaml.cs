@@ -18,16 +18,17 @@ public partial class SettingsWindow : Window
     private readonly ObservableCollection<AppEntry> _registered;
     private readonly Action _onChanged;
     private readonly Action<int>? _onHotkeyChanged;
-    private readonly Action<bool>? _onMemoryOnlyChanged;
     private readonly ObservableCollection<AppEntry> _running = new();
     private bool _capturingHotkey;
     private bool _suppressPinned;
     private bool _suppressRc;
     private bool _suppressFm;
+    private Point _dragStart;
+    private bool _dragging;
 
     public SettingsWindow(ConfigService cfg, IconService icons,
         ObservableCollection<AppEntry> registered, Action onChanged,
-        Action<int>? onHotkeyChanged = null, Action<bool>? onMemoryOnlyChanged = null)
+        Action<int>? onHotkeyChanged = null)
     {
         InitializeComponent();
         _cfg = cfg;
@@ -35,7 +36,6 @@ public partial class SettingsWindow : Window
         _registered = registered;
         _onChanged = onChanged;
         _onHotkeyChanged = onHotkeyChanged;
-        _onMemoryOnlyChanged = onMemoryOnlyChanged;
 
         RegisteredList.ItemsSource = _registered;
         RunningList.ItemsSource = _running;
@@ -47,10 +47,6 @@ public partial class SettingsWindow : Window
         SidebarCheck.IsChecked = _cfg.Config.SidebarEnabled;
         SidebarCheck.Checked += (_, _) => { _cfg.Config.SidebarEnabled = true; _cfg.Save(); _onChanged(); };
         SidebarCheck.Unchecked += (_, _) => { _cfg.Config.SidebarEnabled = false; _cfg.Save(); _onChanged(); };
-
-        MemoryOnlyCheck.IsChecked = _cfg.Config.MemoryOnly;
-        MemoryOnlyCheck.Checked += (_, _) => { _cfg.Config.MemoryOnly = true; _cfg.Save(); _onMemoryOnlyChanged?.Invoke(true); };
-        MemoryOnlyCheck.Unchecked += (_, _) => { _cfg.Config.MemoryOnly = false; _cfg.Save(); _onMemoryOnlyChanged?.Invoke(false); };
 
         HotkeyButton.Content = VkName(_cfg.Config.HotkeyVk);
         _suppressPinned = true;
@@ -253,6 +249,46 @@ public partial class SettingsWindow : Window
         _cfg.Save();
         _onChanged();
         RefreshRunning();
+    }
+
+    // ── 드래그로 앱 추가 (RunningList → RegisteredList) ──
+    private void RunningList_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStart = e.GetPosition(null);
+        _dragging = false;
+    }
+
+    private void RunningList_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dragging) return;
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        var items = RunningList.SelectedItems.Cast<AppEntry>().ToList();
+        if (items.Count == 0) return;
+        _dragging = true;
+        DragDrop.DoDragDrop(RunningList, items, DragDropEffects.Move);
+        _dragging = false;
+    }
+
+    private void RegisteredList_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(typeof(List<AppEntry>))
+            ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void RegisteredList_Drop(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(typeof(List<AppEntry>))) return;
+        foreach (var sel in (List<AppEntry>)e.Data.GetData(typeof(List<AppEntry>)))
+        {
+            sel.Icon = _icons.GetIcon(sel);
+            _registered.Add(sel);
+            _running.Remove(sel);
+        }
+        Persist();
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshRunning();

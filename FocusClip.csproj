@@ -11,7 +11,7 @@
     <AssemblyName>FocusClip</AssemblyName>
     <RootNamespace>FocusClip</RootNamespace>
     <ApplicationIcon>app_icon.ico</ApplicationIcon>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
 
     <!-- 배포 전용 속성(RID/단일EXE/ReadyToRun/self-contained)은 여기에 두지 않는다.
          프로젝트에 박아두면 일반 dotnet build 도 RID 특화 + R2R 크로스젠을 타서 매우 느려짐.

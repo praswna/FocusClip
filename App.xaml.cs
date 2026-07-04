@@ -36,6 +36,7 @@ public partial class App : Application
     private SettingsWindow? _settings;
     private ClipboardPopup? _clipPopup;
     private PathPopup? _pathPopup;
+    private PromptPopup? _promptPopup;
     private Toast? _toast;
     private CapsIndicator? _capsIndicator;
     private DispatcherTimer? _refreshTimer;
@@ -47,6 +48,7 @@ public partial class App : Application
     private readonly IconService _icons = new();
     private readonly WindowManager _windows = new();
     private readonly ClipboardService _clipboard = new();
+    private readonly PromptService _prompts = new();
     private readonly ObservableCollection<AppEntry> _apps = new();
 
     protected override void OnStartup(StartupEventArgs e)
@@ -163,8 +165,7 @@ public partial class App : Application
         _toast = new Toast();
         _capsIndicator = new CapsIndicator();
         _capsIndicator.ToggleRequested += () => NativeMethods.ToggleCapsLock(); // 클릭 → 대소문자 전환(후크는 무시)
-        _clipboard.MemoryOnly = _configSvc.Config.MemoryOnly; // 보안: 메모리 전용 모드(디스크 미저장) — LoadHistory 전에 설정
-        _clipboard.LoadHistory();// P004/P012: Start() 전에 이전 히스토리 복원
+        _clipboard.LoadHistory();// 고정해 둔 클립만 복원(미고정은 메모리 전용) — Start() 전에
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
         {
@@ -190,6 +191,16 @@ public partial class App : Application
         _pathPopup.PathPinToggled += item => Dispatcher.BeginInvoke(() => _clipboard.TogglePin(item));
         _pathPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_pathPopup));
         _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
+
+        _prompts.Load(); // 프롬프트 보관함 복원(전량 영구 저장)
+        _promptPopup = new PromptPopup();
+        _promptPopup.SetItems(_prompts.Prompts);
+        _promptPopup.PromptSelected += p => Dispatcher.BeginInvoke(() => OnPromptSelected(p));
+        _promptPopup.PromptAddRequested += () => Dispatcher.BeginInvoke(OnPromptAdd);
+        _promptPopup.PromptEditRequested += p => Dispatcher.BeginInvoke(() => OnPromptEdit(p));
+        _promptPopup.PromptDeleteRequested += p => Dispatcher.BeginInvoke(() => _prompts.Remove(p));
+        _promptPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_promptPopup));
+        _promptPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱"));
     }
 
     /// <summary>핀 해제 시: 도크가 숨겨진 '단독 핀 팝업'이라면 닫는다(CapsLock 으로 안 닫히므로 핀 해제가 닫는 수단).</summary>
@@ -197,7 +208,13 @@ public partial class App : Application
     {
         if (popup == null) return;
         bool dockVisible = _dock?.IsVisible ?? false;
-        bool pinned = popup is ClipboardPopup cp ? cp.Pinned : popup is PathPopup pp && pp.Pinned;
+        bool pinned = popup switch
+        {
+            ClipboardPopup cp => cp.Pinned,
+            PathPopup pp => pp.Pinned,
+            PromptPopup pr => pr.Pinned,
+            _ => false,
+        };
         if (!pinned && !dockVisible) popup.Hide();
     }
 
@@ -284,6 +301,8 @@ public partial class App : Application
             _clipboard.RefreshPathExistsAll(); // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
             _pathPopup!.ShowBelow(_dock, _clipPopup!.IsVisible ? _clipPopup : null);
         }
+        // 프롬프트 보관함은 항상 표시(비어 있어도 +로 첫 항목 추가). 클립 팝업 오른쪽, 없으면 도크 오른쪽.
+        _promptPopup!.ShowRightOf(_clipPopup!.IsVisible ? _clipPopup : _dock);
         _hotkey!.CaptureExtraKeys = true;
         _overlayShownAt = DateTime.Now;
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
@@ -296,6 +315,7 @@ public partial class App : Application
         _capsIndicator?.Hide(); // 대소문자 인디케이터는 항상 오버레이와 함께 닫힌다(핀 대상 아님)
         if (force || !(_clipPopup?.Pinned ?? false)) _clipPopup?.Hide();
         if (force || !(_pathPopup?.Pinned ?? false)) _pathPopup?.Hide();
+        if (force || !(_promptPopup?.Pinned ?? false)) _promptPopup?.Hide();
         if (_hotkey != null) _hotkey.CaptureExtraKeys = false;
         _outsidePoll?.Stop();
     }
@@ -308,9 +328,11 @@ public partial class App : Application
             bool dockVisible = _dock?.IsVisible ?? false;
             bool popupVisible = _clipPopup?.IsVisible ?? false;
             bool pathVisible = _pathPopup?.IsVisible ?? false;
+            bool promptVisible = _promptPopup?.IsVisible ?? false;
             bool pinned = _clipPopup?.Pinned ?? false;
             bool pathPinned = _pathPopup?.Pinned ?? false;
-            if (!dockVisible && (!popupVisible || pinned) && (!pathVisible || pathPinned)) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
+            bool promptPinned = _promptPopup?.Pinned ?? false;
+            if (!dockVisible && (!popupVisible || pinned) && (!pathVisible || pathPinned) && (!promptVisible || promptPinned)) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
             if ((DateTime.Now - _overlayShownAt).TotalMilliseconds < 200) return;            // 표시 직후 유예
 
             bool clicked = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0
@@ -320,9 +342,10 @@ public partial class App : Application
             bool outsideDock = !dockVisible || _dock == null || CursorOutside(_dock);
             bool outsidePopup = !popupVisible || _clipPopup == null || CursorOutside(_clipPopup);
             bool outsidePath = !pathVisible || _pathPopup == null || CursorOutside(_pathPopup);
+            bool outsidePrompt = !promptVisible || _promptPopup == null || CursorOutside(_promptPopup);
             bool capsVisible = _capsIndicator?.IsVisible ?? false;
             bool outsideCaps = !capsVisible || _capsIndicator == null || CursorOutside(_capsIndicator);
-            if (outsideDock && outsidePopup && outsidePath && outsideCaps) HideOverlay(force: false);
+            if (outsideDock && outsidePopup && outsidePath && outsidePrompt && outsideCaps) HideOverlay(force: false);
         }
         catch { /* 30ms 타이머는 절대 앱을 죽이지 않게 */ }
     }
@@ -331,7 +354,9 @@ public partial class App : Application
     {
         if (_outsidePoll == null) return;
         bool need = (_dock?.IsVisible ?? false)
-                 || ((_clipPopup?.IsVisible ?? false) && !(_clipPopup?.Pinned ?? false));
+                 || ((_clipPopup?.IsVisible ?? false) && !(_clipPopup?.Pinned ?? false))
+                 || ((_pathPopup?.IsVisible ?? false) && !(_pathPopup?.Pinned ?? false))
+                 || ((_promptPopup?.IsVisible ?? false) && !(_promptPopup?.Pinned ?? false));
         if (need) { _overlayShownAt = DateTime.Now; _outsidePoll.Start(); }
     }
 
@@ -395,11 +420,50 @@ public partial class App : Application
             }
         }
         catch { }
+        PasteToPrevious();
+    }
 
+    /// <summary>직전 창에 포커스를 되돌린 뒤 Ctrl+V 합성(포커스 안정화까지 120ms 지연).</summary>
+    private void PasteToPrevious()
+    {
         if (_prevForeground != IntPtr.Zero) NativeMethods.SetForegroundWindow(_prevForeground);
         var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
         t.Tick += (_, _) => { t.Stop(); PasteService.SendCtrlV(); };
         t.Start();
+    }
+
+    // ── 프롬프트 선택 → 본문을 클립보드에 넣고 직전 창에 붙여넣기 ──
+    private void OnPromptSelected(PromptItem p)
+    {
+        HideOverlay();
+        try
+        {
+            _clipboard.MarkInternalCopy(); // 붙여넣은 프롬프트가 새 클립으로 재수집되지 않게
+            Clipboard.SetText(p.Text);
+        }
+        catch { }
+        PasteToPrevious();
+    }
+
+    // ── 프롬프트 추가/편집(모달 편집창) ──
+    private void OnPromptAdd()
+    {
+        _outsidePoll?.Stop();          // 모달 편집기 동안 오토클로즈 정지
+        HideOverlay(force: true);      // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
+        var dlg = new PromptEditWindow { Topmost = true };
+        dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
+        if (dlg.ShowDialog() == true)
+            _prompts.Add(dlg.ResultTitle, dlg.ResultText);
+    }
+
+    private void OnPromptEdit(PromptItem p)
+    {
+        _outsidePoll?.Stop();
+        HideOverlay(force: true);
+        var dlg = new PromptEditWindow(p.Title, p.Text) { Topmost = true };
+        dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
+        if (dlg.ShowDialog() == true)
+            _prompts.Update(p, dlg.ResultTitle, dlg.ResultText);
     }
 
     // ── 경로/URL 열기(셸 실행: 로컬은 탐색기/기본앱, URL은 기본 브라우저) ──
@@ -521,8 +585,7 @@ public partial class App : Application
         {
             _settings = new SettingsWindow(_configSvc, _icons, _apps,
                 onChanged: () => { RebuildSidebar(); RefreshActiveStates(); },
-                onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; },
-                onMemoryOnlyChanged: v => _clipboard.MemoryOnly = v);
+                onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; });
             _settings.Closed += (_, _) => _settings = null;
             _settings.Show();
         }
