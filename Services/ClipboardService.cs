@@ -27,10 +27,14 @@ public sealed class ClipboardService : IDisposable
     // 모든 앱 데이터는 ConfigService.Dir(=%LOCALAPPDATA%\FocusClip) 한 곳에 모은다.
     // 클립 본문은 용량이 크고 자주 생성·삭제되므로 OneDrive·로밍 비대상인 Local 에 둬야
     // 디하이드레이트(클라우드 전용)로 드래그/열기가 느려지지 않는다.
-    // 저장 루트(media) 아래 텍스트/이미지를 분리 보관. SaveDir은 '열기' 대상(부모) 및 호환용으로 유지.
-    public static string SaveDir { get; } = Path.Combine(ConfigService.Dir, "media");
-    public static string TextDir { get; } = Path.Combine(SaveDir, "text");
-    public static string ImageDir { get; } = Path.Combine(SaveDir, "image");
+    // 클립 본문(텍스트 .txt / 이미지 .png)은 Win+Shift+S 스크린샷이 모이는 Pictures\Screenshots 에
+    // 직접 저장한다(모든 클립을 한 폴더에 모으자는 요청). FocusClip 파일은 clip_* 이름이라 OS 스크린샷과
+    // 섞여도 구분되고, 핀 해제 삭제도 자기 파일만 지운다. 옛 위치(LocalAppData\FocusClip\media)의 파일은
+    // clips.json 에 절대경로로 남아 그대로 로드된다(본문 이전 불필요).
+    public static string SaveDir { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Screenshots");
+    public static string TextDir { get; } = SaveDir;   // 텍스트도 Screenshots 루트에 직접
+    public static string ImageDir { get; } = SaveDir;  // 이미지도 Screenshots 루트에 직접
     private static readonly string HistoryPath = Path.Combine(ConfigService.Dir, "clips.json");
 
     public ObservableCollection<ClipItem> Items { get; } = new();

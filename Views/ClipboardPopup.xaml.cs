@@ -25,6 +25,7 @@ public partial class ClipboardPopup : Window
     public event Action<ClipItem>? ClipPinToggled;   // C2: 카드 핀 토글
     public event Action<ClipItem>? ClipEditRequested; // C4/C5: 카드 우클릭 편집
     public event Action<ClipItem>? ClipOpenRequested; // 저장된 본문 파일 위치 열기
+    public event Action<ClipItem>? ClipPromoteRequested; // 텍스트 클립 → 프롬프트 보관함으로 승격
     public event Action? OpenFolderRequested;         // 헤더 파일 수 클릭 → 저장 폴더 열기
     public event Action? PinChanged;                  // 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
     public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
@@ -163,6 +164,13 @@ public partial class ClipboardPopup : Window
             ClipOpenRequested?.Invoke(item);
     }
 
+    private void Promote_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; // 카드 선택(복사)으로 전파 방지
+        if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
+            ClipPromoteRequested?.Invoke(item);
+    }
+
     private void PinToggle_Changed(object sender, RoutedEventArgs e)
     {
         Pinned = PinToggle.IsChecked == true;
@@ -211,12 +219,18 @@ public partial class ClipboardPopup : Window
     private void UpdateFolderCount()
     {
         FolderCount.Text = "📁 …"; // 즉시 표시 — 팝업 오픈을 막지 않는다
-        string dir = ClipboardService.SaveDir;
+        string dir = ClipboardService.SaveDir; // Screenshots 루트(텍스트·이미지 공용)
         System.Threading.Tasks.Task.Run(() =>
         {
             int n = 0;
-            // text·image 하위 폴더까지 포함해 전체 저장 파일 수를 센다(분리 저장 대응).
-            try { if (System.IO.Directory.Exists(dir)) n = System.IO.Directory.EnumerateFiles(dir, "*", System.IO.SearchOption.AllDirectories).Count(); }
+            // FocusClip 이 저장한 본문(clip_*.txt / clip_*.png)만 센다 — OS 스크린샷·타 파일 제외, 비재귀.
+            try
+            {
+                if (System.IO.Directory.Exists(dir))
+                    n = System.IO.Directory.EnumerateFiles(dir, "clip_*.*")
+                        .Count(f => f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                                 || f.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
+            }
             catch { }
             Dispatcher.BeginInvoke(() => FolderCount.Text = $"📁 {n}");
         });

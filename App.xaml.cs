@@ -43,6 +43,7 @@ public partial class App : Application
     private DispatcherTimer? _outsidePoll;   // 오토클로즈: 외부 클릭 감지
     private DateTime _overlayShownAt;
     private IntPtr _prevForeground;
+    private bool _editDialogOpen; // 모달 편집기 중복 오픈 방지(더블클릭 → BeginInvoke 큐잉으로 중첩 모달이 열리는 것 차단)
 
     private readonly ConfigService _configSvc = new();
     private readonly IconService _icons = new();
@@ -112,6 +113,8 @@ public partial class App : Application
     {
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add("설정", null, (_, _) => Dispatcher.BeginInvoke(OpenSettings));
+        // 프롬프트 팝업은 비어 있으면 표시되지 않으므로, 첫 항목(또는 전부 삭제 후)을 만들 수 있는 상시 진입로.
+        menu.Items.Add("프롬프트 추가", null, (_, _) => Dispatcher.BeginInvoke(OnPromptAdd));
         menu.Items.Add("저장 폴더 열기", null, (_, _) => OpenSaveFolder());
         menu.Items.Add("종료", null, (_, _) => ExitApp());
         _tray = new WinForms.NotifyIcon
@@ -179,6 +182,7 @@ public partial class App : Application
         _clipPopup.ClipPinToggled += item => Dispatcher.BeginInvoke(() => _clipboard.TogglePin(item));
         _clipPopup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
         _clipPopup.ClipOpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
+        _clipPopup.ClipPromoteRequested += item => Dispatcher.BeginInvoke(() => OnClipPromote(item));
         _clipPopup.OpenFolderRequested += () => Dispatcher.BeginInvoke(OpenSaveFolder);
         _clipPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_clipPopup));
         _clipPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
@@ -301,8 +305,16 @@ public partial class App : Application
             _clipboard.RefreshPathExistsAll(); // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
             _pathPopup!.ShowBelow(_dock, _clipPopup!.IsVisible ? _clipPopup : null);
         }
-        // 프롬프트 보관함은 항상 표시(비어 있어도 +로 첫 항목 추가). 클립 팝업 오른쪽, 없으면 도크 오른쪽.
-        _promptPopup!.ShowRightOf(_clipPopup!.IsVisible ? _clipPopup : _dock);
+        // 프롬프트가 있을 때만 표시(다른 팝업과 동일). 클립 팝업 오른쪽, 없으면 도크 오른쪽.
+        // 첫 프롬프트는 클립 카드의 🔖(프롬프트로 저장) 또는 트레이 「프롬프트 추가」로 만든다.
+        if (_prompts.Prompts.Count > 0)
+        {
+            bool clipVisible = _clipPopup!.IsVisible;
+            Window anchor = clipVisible ? _clipPopup : _dock!;
+            // 클립 팝업이 도크 위(기본 위치)면 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
+            bool alignBottom = clipVisible && _clipPopup.Top < _dock!.Top;
+            _promptPopup!.ShowRightOf(anchor, alignBottom, _pathPopup!.IsVisible ? _pathPopup : null);
+        }
         _hotkey!.CaptureExtraKeys = true;
         _overlayShownAt = DateTime.Now;
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
@@ -446,24 +458,49 @@ public partial class App : Application
     }
 
     // ── 프롬프트 추가/편집(모달 편집창) ──
-    private void OnPromptAdd()
+    /// <summary>핀 상태로 떠 있는 팝업이 하나라도 있는지(모달 종료 후 오버레이 복구 판단용).</summary>
+    private bool AnyPinnedPopupVisible()
+        => ((_clipPopup?.Pinned ?? false) && _clipPopup!.IsVisible)
+        || ((_pathPopup?.Pinned ?? false) && _pathPopup!.IsVisible)
+        || ((_promptPopup?.Pinned ?? false) && _promptPopup!.IsVisible);
+
+    /// <summary>프롬프트 편집 모달 공통 진입로(추가/편집/승격). 오토클로즈 정지 → 오버레이 강제 숨김 →
+    /// Topmost 댄스(Topmost 오버레이가 편집창을 가리지 않게 잠깐 위로 올렸다 해제)로 편집창 표시 →
+    /// 저장 시 onSave. 종료 후 핀 팝업이 있었으면 오버레이 복구, 아니면 폴 재개(OnClipEdit과 동일 규칙).</summary>
+    private void ShowPromptDialog(string title, string text, Action<string, string> onSave)
     {
+        if (_editDialogOpen) return; // 더블클릭으로 큐잉된 중복 호출 무시
+        _editDialogOpen = true;
+        bool wasPinned = AnyPinnedPopupVisible(); // 모달 종료 후 복구 대상
         _outsidePoll?.Stop();          // 모달 편집기 동안 오토클로즈 정지
         HideOverlay(force: true);      // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
-        var dlg = new PromptEditWindow { Topmost = true };
-        dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
-        if (dlg.ShowDialog() == true)
-            _prompts.Add(dlg.ResultTitle, dlg.ResultText);
+        try
+        {
+            var dlg = new PromptEditWindow(title, text) { Topmost = true };
+            dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
+            if (dlg.ShowDialog() == true)
+                onSave(dlg.ResultTitle, dlg.ResultText);
+        }
+        finally
+        {
+            _editDialogOpen = false;
+            // 모달 동안 닫힌 오버레이를 핀 상태였으면 복구, 아니면 폴 재개
+            if (wasPinned && !(_dock?.IsVisible ?? false))
+                Dispatcher.BeginInvoke(ShowOverlay);
+            else
+                OutsidePollMaybeStart();
+        }
     }
 
-    private void OnPromptEdit(PromptItem p)
+    private void OnPromptAdd() => ShowPromptDialog("", "", (t, x) => _prompts.Add(t, x));
+
+    private void OnPromptEdit(PromptItem p) => ShowPromptDialog(p.Title, p.Text, (t, x) => _prompts.Update(p, t, x));
+
+    // ── 클립 → 프롬프트 승격: 편집창을 본문 미리 채워 열고, 저장 시 보관함에 추가 ──
+    private void OnClipPromote(ClipItem item)
     {
-        _outsidePoll?.Stop();
-        HideOverlay(force: true);
-        var dlg = new PromptEditWindow(p.Title, p.Text) { Topmost = true };
-        dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
-        if (dlg.ShowDialog() == true)
-            _prompts.Update(p, dlg.ResultTitle, dlg.ResultText);
+        if (item.IsImage) return; // 프롬프트는 텍스트 전용
+        ShowPromptDialog("", item.Text, (t, x) => _prompts.Add(t, x));
     }
 
     // ── 경로/URL 열기(셸 실행: 로컬은 탐색기/기본앱, URL은 기본 브라우저) ──
@@ -490,7 +527,9 @@ public partial class App : Application
     // ── 클립 편집(C4 텍스트 / C5 이미지 주석) ──
     private void OnClipEdit(ClipItem item)
     {
-        bool wasPinned = _clipPopup?.Pinned ?? false;
+        if (_editDialogOpen) return; // 더블클릭으로 큐잉된 중복 호출 무시
+        _editDialogOpen = true;
+        bool wasPinned = AnyPinnedPopupVisible(); // 클립뿐 아니라 경로·프롬프트 핀 팝업도 복구 대상
         _outsidePoll?.Stop(); // 모달 편집기 동안 오토클로즈 정지
         HideOverlay(force: true); // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
         try
@@ -520,8 +559,9 @@ public partial class App : Application
         catch { }
         finally
         {
+            _editDialogOpen = false;
             // 편집 대화상자가 떠 있는 동안 닫힌 오버레이를 핀 상태였으면 복구, 아니면 폴 재개
-            if (wasPinned && !(_clipPopup?.IsVisible ?? false))
+            if (wasPinned && !(_dock?.IsVisible ?? false))
                 Dispatcher.BeginInvoke(ShowOverlay);
             else
                 OutsidePollMaybeStart();
@@ -559,7 +599,13 @@ public partial class App : Application
                     Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.FilePath}\"") { UseShellExecute = true });
             }
             else
-                OpenSaveFolder(); // 저장 전이거나 파일이 사라진 경우 폴더만 연다
+            {
+                // 저장 전(메모리 전용)이거나 파일이 사라진 경우: 그 클립이 저장될 폴더를 연다
+                // — 이미지는 Screenshots, 텍스트/경로는 media.
+                string dir = item.IsImage ? ClipboardService.ImageDir : ClipboardService.SaveDir;
+                Directory.CreateDirectory(dir);
+                OpenFolderWith(dir);
+            }
         }
         catch { _toast?.ShowToast("열 수 없음"); }
     }

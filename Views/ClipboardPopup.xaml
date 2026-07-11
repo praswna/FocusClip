@@ -62,6 +62,29 @@
             </Setter>
         </Style>
 
+        <!-- 카드 프롬프트 승격(🔖) 버튼: 텍스트 클립을 프롬프트 보관함으로 -->
+        <Style x:Key="CardPromote" TargetType="Button">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="9">
+                            <TextBlock Text="🔖" FontSize="10" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" Opacity="0.7"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 카드 경로열기(📂) 버튼: 저장된 본문 파일 위치를 탐색기로 -->
         <Style x:Key="CardOpen" TargetType="Button">
             <Setter Property="Width" Value="18"/>
@@ -261,6 +284,19 @@
                                                 HorizontalAlignment="Right" VerticalAlignment="Top">
                                         <Button Style="{StaticResource CardEdit}" Click="Edit_Click"
                                                 Tag="{Binding}" ToolTip="수정"/>
+                                        <!-- 프롬프트 승격: 텍스트 클립에만 표시 -->
+                                        <Button Click="Promote_Click" Tag="{Binding}" ToolTip="프롬프트로 저장">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource CardPromote}">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsImage}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                         <Button Style="{StaticResource CardPin}" Click="Pin_Click"
                                                 Tag="{Binding}" ToolTip="고정"/>
                                         <Button Style="{StaticResource CardOpen}" Click="Open_Click"

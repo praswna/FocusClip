@@ -151,22 +151,31 @@ public partial class PromptPopup : Window
     }
 
     /// <summary>
-    /// 기준 창(클립 팝업 또는 도크) 오른쪽에 배치(상단 정렬). 오른쪽 공간이 부족하면 왼쪽으로 뒤집는다.
+    /// 기준 창(클립 팝업 또는 도크) 오른쪽에 배치. alignBottom이면 아래 모서리를 맞춰 위로 자라게 한다
+    /// — 도크 위에 뜬 클립 팝업 옆에 붙을 때 이 팝업이 더 길어도 도크·경로 팝업을 덮지 않는다.
+    /// avoid(경로 팝업)가 보이면 그 오른쪽 끝까지 비켜 배치. 오른쪽 공간이 부족하면 왼쪽으로 뒤집는다.
     /// </summary>
-    public void ShowRightOf(Window anchor)
+    public void ShowRightOf(Window anchor, bool alignBottom = false, Window? avoid = null)
     {
         bool wasVisible = IsVisible;
         Show();
         if (Pinned && wasVisible) return; // 핀+이미 표시 중이면 사용자가 옮긴 위치 유지(재배치 안 함)
         var wa = ScreenUtil.WorkAreaDip(anchor); // 기준 창이 놓인 모니터 기준(멀티모니터)
 
-        double left = anchor.Left + anchor.ActualWidth + 6;
-        // 오른쪽 공간이 부족하면 기준 창 왼쪽으로 뒤집어 배치
+        bool avoidOn = avoid != null && avoid.IsVisible;
+        double rightEdge = anchor.Left + anchor.ActualWidth;                    // 비켜야 할 오른쪽 끝
+        if (avoidOn) rightEdge = Math.Max(rightEdge, avoid!.Left + avoid.ActualWidth);
+        double leftEdge = anchor.Left;                                          // 왼쪽 뒤집기 기준
+        if (avoidOn) leftEdge = Math.Min(leftEdge, avoid!.Left);
+
+        double left = rightEdge + 6;
+        // 오른쪽 공간이 부족하면 왼쪽으로 뒤집어 배치
         if (left + ActualWidth > wa.Right)
-            left = anchor.Left - ActualWidth - 6;
+            left = leftEdge - ActualWidth - 6;
         Left = Math.Max(wa.Left, Math.Min(left, wa.Right - ActualWidth));
 
-        double top = anchor.Top; // 기준 창과 상단 정렬
+        // 상단 정렬(기본) 또는 아래 모서리 정렬(위로 자람)
+        double top = alignBottom ? anchor.Top + anchor.ActualHeight - ActualHeight : anchor.Top;
         Top = Math.Max(wa.Top, Math.Min(top, wa.Bottom - ActualHeight));
     }
 }

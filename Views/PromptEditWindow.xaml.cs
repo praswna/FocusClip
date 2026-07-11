@@ -32,10 +32,10 @@ public partial class PromptEditWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        // 제목·본문이 모두 비면 저장하지 않음(빈 프롬프트 방지)
+        // 제목·본문이 모두 비면 저장하지 않고 창 유지(닫아버리면 취소와 구분이 안 돼 저장된 줄 오인)
         if (string.IsNullOrWhiteSpace(TitleBox.Text) && string.IsNullOrWhiteSpace(BodyBox.Text))
         {
-            DialogResult = false;
+            TitleBox.Focus();
             return;
         }
         ResultTitle = TitleBox.Text.Trim();

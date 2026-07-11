@@ -12,24 +12,33 @@ namespace FocusClip.Services;
 /// </summary>
 public sealed class ConfigService
 {
-    public static string Dir { get; } =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FocusClip");
+    // 사용자 파일(설정·기록·프롬프트·아이콘 캐시)은 사진\Screenshots\FocusClip 에 둔다.
+    // (클립 본문 txt/png 은 그 상위 Screenshots 루트에 직접 저장 — ClipboardService.SaveDir)
+    public static string Dir { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Screenshots", "FocusClip");
 
-    static ConfigService() => TryMigrateFromRoaming();
+    static ConfigService()
+    {
+        // 구 위치에서 새 위치(사진\Screenshots\FocusClip)로 데이터 이전.
+        // 최신 데이터가 있는 LocalAppData\FocusClip 을 먼저(새 위치에 없는 항목만 복사),
+        // 더 오래된 Roaming(%APPDATA%)\FocusClip 이 남은 빈 항목을 채운다. 옛 폴더는 그대로 둔다.
+        TryMigrateFrom(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FocusClip"));
+        TryMigrateFrom(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FocusClip"));
+    }
 
-    /// <summary>구버전이 쓰던 %APPDATA%(Roaming)\FocusClip 데이터를 새 Local 위치로 이전.
-    /// 파일 단위로, 새 위치에 없는 항목만 복사한다 — 새 폴더가 media 등으로 이미 존재해도
-    /// 누락분(config·clips·icons)을 채운다. 옛 폴더는 백업으로 남겨 둔다.</summary>
-    private static void TryMigrateFromRoaming()
+    /// <summary>구 위치(old)의 사용자 파일을 새 Dir로 이전. 파일 단위로, 새 위치에 없는 항목만 복사한다
+    /// — 이미 일부 있어도 누락분(config·clips·prompts·icons)을 채운다. 옛 폴더는 백업으로 남겨 둔다.
+    /// 클립 본문(txt/png)은 clips.json에 절대경로로 남아 옛 위치에서 그대로 로드되므로 이전하지 않는다.</summary>
+    private static void TryMigrateFrom(string old)
     {
         try
         {
-            string old = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "FocusClip");
-            if (!Directory.Exists(old)) return;
+            if (!Directory.Exists(old) || string.Equals(old, Dir, StringComparison.OrdinalIgnoreCase)) return;
             Directory.CreateDirectory(Dir);
 
-            foreach (var name in new[] { "config.json", "clips.json" })
+            foreach (var name in new[] { "config.json", "config.bak", "clips.json", "prompts.json" })
             {
                 string src = Path.Combine(old, name);
                 string dst = Path.Combine(Dir, name);
