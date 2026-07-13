@@ -62,6 +62,30 @@
             </Setter>
         </Style>
 
+        <!-- 헤더 그룹 전환(▾) 버튼: 호버 시 액센트 -->
+        <Style x:Key="SwitchBtn" TargetType="Button">
+            <Setter Property="Width" Value="18"/>
+            <Setter Property="Height" Value="18"/>
+            <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="Transparent" CornerRadius="4">
+                            <TextBlock Text="▾" FontSize="11" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 헤더 추가(+) 버튼: 호버 시 액센트 -->
         <Style x:Key="AddBtn" TargetType="Button">
             <Setter Property="Width" Value="20"/>
@@ -102,6 +126,7 @@
             <!-- 핀 고정 시에만 보이는 이동 핸들(드래그하여 팝업 이동) -->
             <Thumb x:Name="MoveHandle" Grid.Row="0" Height="12" Visibility="Collapsed"
                    Cursor="SizeAll" Margin="0,0,0,3" DragDelta="MoveHandle_DragDelta"
+                   DragCompleted="MoveHandle_DragCompleted"
                    ToolTip="드래그하여 이동">
                 <Thumb.Template>
                     <ControlTemplate TargetType="Thumb">
@@ -113,11 +138,15 @@
                 </Thumb.Template>
             </Thumb>
 
-            <!-- 헤더: 제목 + 추가(+) + 팝업 핀 토글 -->
+            <!-- 헤더: 그룹명 + 그룹 전환(▾) + 추가(+) + 팝업 핀 토글 -->
             <Grid Grid.Row="1" Height="20" Margin="0,0,0,4">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
-                    <TextBlock Text="프롬프트" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"
-                               FontSize="10" VerticalAlignment="Center" Margin="2,0,6,0"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center"
+                            Margin="0,0,24,0">
+                    <TextBlock x:Name="GroupName" Text="{Binding Name}" Foreground="{StaticResource AccentBrush}"
+                               FontWeight="SemiBold" FontSize="10" VerticalAlignment="Center" Margin="2,0,2,0"
+                               MaxWidth="130" TextTrimming="CharacterEllipsis"/>
+                    <Button x:Name="SwitchButton" Style="{StaticResource SwitchBtn}" Click="Switch_Click"
+                            ToolTip="그룹 전환·관리"/>
                     <Button x:Name="AddButton" Style="{StaticResource AddBtn}" Click="Add_Click"
                             ToolTip="프롬프트 추가"/>
                 </StackPanel>

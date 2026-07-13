@@ -7,6 +7,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -36,7 +38,7 @@ public partial class App : Application
     private SettingsWindow? _settings;
     private ClipboardPopup? _clipPopup;
     private PathPopup? _pathPopup;
-    private PromptPopup? _promptPopup;
+    private readonly Dictionary<PromptGroup, PromptPopup> _promptPopups = new(); // 그룹별 팝업(지연 생성)
     private Toast? _toast;
     private CapsIndicator? _capsIndicator;
     private DispatcherTimer? _refreshTimer;
@@ -114,7 +116,7 @@ public partial class App : Application
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add("설정", null, (_, _) => Dispatcher.BeginInvoke(OpenSettings));
         // 프롬프트 팝업은 비어 있으면 표시되지 않으므로, 첫 항목(또는 전부 삭제 후)을 만들 수 있는 상시 진입로.
-        menu.Items.Add("프롬프트 추가", null, (_, _) => Dispatcher.BeginInvoke(OnPromptAdd));
+        menu.Items.Add("프롬프트 추가", null, (_, _) => Dispatcher.BeginInvoke(() => OnPromptAdd()));
         menu.Items.Add("저장 폴더 열기", null, (_, _) => OpenSaveFolder());
         menu.Items.Add("종료", null, (_, _) => ExitApp());
         _tray = new WinForms.NotifyIcon
@@ -196,15 +198,42 @@ public partial class App : Application
         _pathPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_pathPopup));
         _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
 
-        _prompts.Load(); // 프롬프트 보관함 복원(전량 영구 저장)
-        _promptPopup = new PromptPopup();
-        _promptPopup.SetItems(_prompts.Prompts);
-        _promptPopup.PromptSelected += p => Dispatcher.BeginInvoke(() => OnPromptSelected(p));
-        _promptPopup.PromptAddRequested += () => Dispatcher.BeginInvoke(OnPromptAdd);
-        _promptPopup.PromptEditRequested += p => Dispatcher.BeginInvoke(() => OnPromptEdit(p));
-        _promptPopup.PromptDeleteRequested += p => Dispatcher.BeginInvoke(() => _prompts.Remove(p));
-        _promptPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_promptPopup));
-        _promptPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱"));
+        _prompts.Load(); // 프롬프트 보관함 복원(전량 영구 저장). 그룹별 팝업은 GetPromptPopup에서 지연 생성
+    }
+
+    /// <summary>그룹의 팝업을 얻는다(없으면 생성 + 이벤트 배선). 그룹 삭제 시 딕셔너리에서 함께 제거된다.</summary>
+    private PromptPopup GetPromptPopup(PromptGroup g)
+    {
+        if (_promptPopups.TryGetValue(g, out var existing)) return existing;
+        var p = new PromptPopup();
+        p.SetGroup(g);
+        p.PromptSelected += it => Dispatcher.BeginInvoke(() => OnPromptSelected(it));
+        p.PromptAddRequested += () => Dispatcher.BeginInvoke(() => OnPromptAdd(g.Name));
+        p.PromptEditRequested += it => Dispatcher.BeginInvoke(() => OnPromptEdit(it));
+        p.PromptDeleteRequested += it => Dispatcher.BeginInvoke(() => _prompts.Remove(it));
+        p.PinChanged += () => Dispatcher.BeginInvoke(() => OnPromptPinChanged(g, p));
+        p.Moved += () => Dispatcher.BeginInvoke(() => SavePromptPin(g, p));
+        p.GroupSwitchRequested += anchor => Dispatcher.BeginInvoke(() => ShowGroupMenu(g, p, anchor));
+        p.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱"));
+        _promptPopups[g] = p;
+        return p;
+    }
+
+    /// <summary>프롬프트 팝업 핀 토글: 그룹에 핀 상태·위치를 영속하고, 단독 핀 해제 시 닫는다(다른 팝업과 동일 규칙).</summary>
+    private void OnPromptPinChanged(PromptGroup g, PromptPopup p)
+    {
+        g.Pinned = p.Pinned;
+        if (p.Pinned && p.IsVisible) { g.PinX = p.Left; g.PinY = p.Top; } // 복원(표시 전 토글) 시엔 저장 위치 보존
+        _prompts.Save();
+        if (!p.Pinned && !(_dock?.IsVisible ?? false)) p.Hide();
+    }
+
+    /// <summary>핀된 프롬프트 팝업 이동 완료: 새 위치를 그룹에 영속.</summary>
+    private void SavePromptPin(PromptGroup g, PromptPopup p)
+    {
+        if (!p.Pinned || !p.IsVisible) return;
+        g.PinX = p.Left; g.PinY = p.Top;
+        _prompts.Save();
     }
 
     /// <summary>핀 해제 시: 도크가 숨겨진 '단독 핀 팝업'이라면 닫는다(CapsLock 으로 안 닫히므로 핀 해제가 닫는 수단).</summary>
@@ -216,8 +245,7 @@ public partial class App : Application
         {
             ClipboardPopup cp => cp.Pinned,
             PathPopup pp => pp.Pinned,
-            PromptPopup pr => pr.Pinned,
-            _ => false,
+            _ => false, // 프롬프트 팝업은 OnPromptPinChanged(그룹 영속 포함)에서 별도 처리
         };
         if (!pinned && !dockVisible) popup.Hide();
     }
@@ -305,19 +333,33 @@ public partial class App : Application
             _clipboard.RefreshPathExistsAll(); // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
             _pathPopup!.ShowBelow(_dock, _clipPopup!.IsVisible ? _clipPopup : null);
         }
-        // 프롬프트가 있을 때만 표시(다른 팝업과 동일). 클립 팝업 오른쪽, 없으면 도크 오른쪽.
-        // 첫 프롬프트는 클립 카드의 🔖(프롬프트로 저장) 또는 트레이 「프롬프트 추가」로 만든다.
-        if (_prompts.Prompts.Count > 0)
-        {
-            bool clipVisible = _clipPopup!.IsVisible;
-            Window anchor = clipVisible ? _clipPopup : _dock!;
-            // 클립 팝업이 도크 위(기본 위치)면 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
-            bool alignBottom = clipVisible && _clipPopup.Top < _dock!.Top;
-            _promptPopup!.ShowRightOf(anchor, alignBottom, _pathPopup!.IsVisible ? _pathPopup : null);
-        }
+        ShowPromptPopups(); // 핀된 그룹은 저장 위치에 복원 + 대표(마지막 사용) 그룹은 클립 팝업 오른쪽에
         _hotkey!.CaptureExtraKeys = true;
         _overlayShownAt = DateTime.Now;
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
+    }
+
+    /// <summary>오버레이 표시 시 프롬프트 팝업 배치. 핀된 그룹 → 저장된 자리 복원,
+    /// 대표(마지막 사용) 그룹 → 클립 팝업 오른쪽(없으면 도크 오른쪽). 그룹이 여러 개라도
+    /// 핀하지 않은 그룹은 대표 하나만 떠서 화면을 점유하지 않고, 나머지는 헤더 ▾ 메뉴로 전환한다.
+    /// 첫 프롬프트는 클립 카드의 🔖(프롬프트로 저장) 또는 트레이 「프롬프트 추가」로 만든다.</summary>
+    private void ShowPromptPopups()
+    {
+        foreach (var g in _prompts.Groups)
+        {
+            if (!g.Pinned) continue;
+            var pp = GetPromptPopup(g);
+            if (!pp.IsVisible) pp.ShowPinnedAt(g.PinX, g.PinY);
+        }
+        var rep = _prompts.RepresentativeGroup();
+        if (rep == null || rep.Items.Count == 0) return; // 빈 보관함이면 표시 안 함(다른 팝업과 동일)
+        var repPopup = GetPromptPopup(rep);
+        if (repPopup.IsVisible) return; // 핀 복원으로 이미 떠 있으면 그대로
+        bool clipVisible = _clipPopup!.IsVisible;
+        Window anchor = clipVisible ? _clipPopup : _dock!;
+        // 클립 팝업이 도크 위(기본 위치)면 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
+        bool alignBottom = clipVisible && _clipPopup.Top < _dock!.Top;
+        repPopup.ShowRightOf(anchor, alignBottom, _pathPopup!.IsVisible ? _pathPopup : null);
     }
 
     /// <summary>오버레이 숨김. force=true(CapsLock·Esc)면 팝업 핀도 무시하고 닫는다(C1).</summary>
@@ -327,7 +369,8 @@ public partial class App : Application
         _capsIndicator?.Hide(); // 대소문자 인디케이터는 항상 오버레이와 함께 닫힌다(핀 대상 아님)
         if (force || !(_clipPopup?.Pinned ?? false)) _clipPopup?.Hide();
         if (force || !(_pathPopup?.Pinned ?? false)) _pathPopup?.Hide();
-        if (force || !(_promptPopup?.Pinned ?? false)) _promptPopup?.Hide();
+        foreach (var pp in _promptPopups.Values)
+            if (force || !pp.Pinned) pp.Hide();
         if (_hotkey != null) _hotkey.CaptureExtraKeys = false;
         _outsidePoll?.Stop();
     }
@@ -340,11 +383,10 @@ public partial class App : Application
             bool dockVisible = _dock?.IsVisible ?? false;
             bool popupVisible = _clipPopup?.IsVisible ?? false;
             bool pathVisible = _pathPopup?.IsVisible ?? false;
-            bool promptVisible = _promptPopup?.IsVisible ?? false;
             bool pinned = _clipPopup?.Pinned ?? false;
             bool pathPinned = _pathPopup?.Pinned ?? false;
-            bool promptPinned = _promptPopup?.Pinned ?? false;
-            if (!dockVisible && (!popupVisible || pinned) && (!pathVisible || pathPinned) && (!promptVisible || promptPinned)) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
+            bool anyPromptClosable = _promptPopups.Values.Any(p => p.IsVisible && !p.Pinned);
+            if (!dockVisible && (!popupVisible || pinned) && (!pathVisible || pathPinned) && !anyPromptClosable) { _outsidePoll?.Stop(); return; } // 닫을 대상 없음
             if ((DateTime.Now - _overlayShownAt).TotalMilliseconds < 200) return;            // 표시 직후 유예
 
             bool clicked = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0
@@ -354,7 +396,7 @@ public partial class App : Application
             bool outsideDock = !dockVisible || _dock == null || CursorOutside(_dock);
             bool outsidePopup = !popupVisible || _clipPopup == null || CursorOutside(_clipPopup);
             bool outsidePath = !pathVisible || _pathPopup == null || CursorOutside(_pathPopup);
-            bool outsidePrompt = !promptVisible || _promptPopup == null || CursorOutside(_promptPopup);
+            bool outsidePrompt = _promptPopups.Values.All(p => !p.IsVisible || CursorOutside(p)); // 핀 포함 전 팝업 밖일 때만
             bool capsVisible = _capsIndicator?.IsVisible ?? false;
             bool outsideCaps = !capsVisible || _capsIndicator == null || CursorOutside(_capsIndicator);
             if (outsideDock && outsidePopup && outsidePath && outsidePrompt && outsideCaps) HideOverlay(force: false);
@@ -368,7 +410,7 @@ public partial class App : Application
         bool need = (_dock?.IsVisible ?? false)
                  || ((_clipPopup?.IsVisible ?? false) && !(_clipPopup?.Pinned ?? false))
                  || ((_pathPopup?.IsVisible ?? false) && !(_pathPopup?.Pinned ?? false))
-                 || ((_promptPopup?.IsVisible ?? false) && !(_promptPopup?.Pinned ?? false));
+                 || _promptPopups.Values.Any(p => p.IsVisible && !p.Pinned);
         if (need) { _overlayShownAt = DateTime.Now; _outsidePoll.Start(); }
     }
 
@@ -462,12 +504,12 @@ public partial class App : Application
     private bool AnyPinnedPopupVisible()
         => ((_clipPopup?.Pinned ?? false) && _clipPopup!.IsVisible)
         || ((_pathPopup?.Pinned ?? false) && _pathPopup!.IsVisible)
-        || ((_promptPopup?.Pinned ?? false) && _promptPopup!.IsVisible);
+        || _promptPopups.Values.Any(p => p.Pinned && p.IsVisible);
 
     /// <summary>프롬프트 편집 모달 공통 진입로(추가/편집/승격). 오토클로즈 정지 → 오버레이 강제 숨김 →
     /// Topmost 댄스(Topmost 오버레이가 편집창을 가리지 않게 잠깐 위로 올렸다 해제)로 편집창 표시 →
-    /// 저장 시 onSave. 종료 후 핀 팝업이 있었으면 오버레이 복구, 아니면 폴 재개(OnClipEdit과 동일 규칙).</summary>
-    private void ShowPromptDialog(string title, string text, Action<string, string> onSave)
+    /// 저장 시 onSave(그룹, 제목, 본문). 종료 후 핀 팝업이 있었으면 오버레이 복구, 아니면 폴 재개(OnClipEdit과 동일 규칙).</summary>
+    private void ShowPromptDialog(string title, string text, string initialGroup, Action<string, string, string> onSave)
     {
         if (_editDialogOpen) return; // 더블클릭으로 큐잉된 중복 호출 무시
         _editDialogOpen = true;
@@ -476,10 +518,11 @@ public partial class App : Application
         HideOverlay(force: true);      // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
         try
         {
-            var dlg = new PromptEditWindow(title, text) { Topmost = true };
+            var dlg = new PromptEditWindow(title, text,
+                _prompts.Groups.Select(g => g.Name), initialGroup) { Topmost = true };
             dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
             if (dlg.ShowDialog() == true)
-                onSave(dlg.ResultTitle, dlg.ResultText);
+                onSave(dlg.ResultGroup, dlg.ResultTitle, dlg.ResultText);
         }
         finally
         {
@@ -492,15 +535,86 @@ public partial class App : Application
         }
     }
 
-    private void OnPromptAdd() => ShowPromptDialog("", "", (t, x) => _prompts.Add(t, x));
+    /// <summary>추가/승격 대화상자의 그룹 칸 초기값: 그룹이 없으면 빈 값(이름부터 묻기), 있으면 마지막 사용 그룹.</summary>
+    private string InitialGroupForAdd() => _prompts.Groups.Count == 0 ? "" : _prompts.LastGroupNameOrDefault;
 
-    private void OnPromptEdit(PromptItem p) => ShowPromptDialog(p.Title, p.Text, (t, x) => _prompts.Update(p, t, x));
+    private void OnPromptAdd() => OnPromptAdd(InitialGroupForAdd()); // 트레이 「프롬프트 추가」
 
-    // ── 클립 → 프롬프트 승격: 편집창을 본문 미리 채워 열고, 저장 시 보관함에 추가 ──
+    private void OnPromptAdd(string initialGroup)
+        => ShowPromptDialog("", "", initialGroup, (g, t, x) => _prompts.Add(g, t, x));
+
+    private void OnPromptEdit(PromptItem p)
+    {
+        string cur = _prompts.GroupOf(p)?.Name ?? InitialGroupForAdd();
+        ShowPromptDialog(p.Title, p.Text, cur, (g, t, x) => _prompts.Update(p, t, x, g)); // 그룹 변경 시 이동
+    }
+
+    // ── 클립 → 프롬프트 승격: 편집창을 본문 미리 채워 열고, 저장 시 지정 그룹(새 이름이면 새 팝업)에 추가 ──
     private void OnClipPromote(ClipItem item)
     {
         if (item.IsImage) return; // 프롬프트는 텍스트 전용
-        ShowPromptDialog("", item.Text, (t, x) => _prompts.Add(t, x));
+        ShowPromptDialog("", item.Text, InitialGroupForAdd(), (g, t, x) => _prompts.Add(g, t, x));
+    }
+
+    // ── 프롬프트 그룹 메뉴(팝업 헤더 ▾): 그룹 전환 + 빈 그룹 삭제 ──
+    private void ShowGroupMenu(PromptGroup current, PromptPopup popup, FrameworkElement anchor)
+    {
+        var menu = new ContextMenu();
+        foreach (var g in _prompts.Groups)
+        {
+            var mi = new MenuItem
+            {
+                Header = $"{g.Name.Replace("_", "__")} ({g.Items.Count})", // _ 는 액세스키 이스케이프
+                IsChecked = ReferenceEquals(g, current),
+            };
+            var target = g;
+            mi.Click += (_, _) => SwitchGroupPopup(current, popup, target);
+            menu.Items.Add(mi);
+        }
+        menu.Items.Add(new Separator());
+        var del = new MenuItem { Header = "이 그룹 삭제 (빈 그룹만)" };
+        del.Click += (_, _) => DeleteGroup(current, popup);
+        menu.Items.Add(del);
+        // 메뉴는 팝업 밖 영역에 그려지므로, 열려 있는 동안 오토클로즈(외부 클릭 감지)를 멈춘다
+        menu.Opened += (_, _) => _outsidePoll?.Stop();
+        menu.Closed += (_, _) => OutsidePollMaybeStart();
+        menu.PlacementTarget = anchor;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>그룹 전환: 현재 팝업이 핀이면 옆에 새로 띄우고, 아니면 같은 자리에서 교체(탭 전환처럼).
+    /// 전환한 그룹이 마지막 사용 그룹이 되어 다음 오버레이의 대표 팝업이 된다.</summary>
+    private void SwitchGroupPopup(PromptGroup from, PromptPopup fromPopup, PromptGroup to)
+    {
+        if (ReferenceEquals(from, to)) return;
+        _prompts.SetLastGroup(to.Name);
+        var p = GetPromptPopup(to);
+        if (p.IsVisible) return; // 이미 떠 있으면(다른 자리에 핀) 그대로
+        if (fromPopup.Pinned)
+        {
+            p.ShowRightOf(fromPopup);
+        }
+        else
+        {
+            p.ShowReplacing(fromPopup);
+            fromPopup.Hide();
+        }
+        OutsidePollMaybeStart(); // 새로 보인 비핀 팝업 감시 재개
+    }
+
+    /// <summary>빈 그룹만 삭제(실수로 프롬프트째 날리는 것 방지). 팝업 창도 함께 정리한다.</summary>
+    private void DeleteGroup(PromptGroup g, PromptPopup popup)
+    {
+        if (g.Items.Count > 0)
+        {
+            _toast?.ShowToast("그룹을 비운 뒤 삭제하세요");
+            return;
+        }
+        popup.Hide();
+        _promptPopups.Remove(g);
+        popup.Close();
+        _prompts.RemoveGroup(g);
     }
 
     // ── 경로/URL 열기(셸 실행: 로컬은 탐색기/기본앱, URL은 기본 브라우저) ──

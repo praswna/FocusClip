@@ -11,31 +11,48 @@ using FocusClip.Models;
 
 namespace FocusClip.Views;
 
-/// <summary>자주 쓰는 프롬프트 보관함 팝업. 사용자가 직접 추가(+)/편집(✎)/삭제(✕)하며,
-/// 클릭 시 직전 창에 본문 붙여넣기, 드래그 시 텍스트로 드롭. 클립보드 팝업 오른쪽에 표시된다.</summary>
+/// <summary>프롬프트 그룹 1개를 보여주는 팝업(그룹마다 독립 창). 사용자가 직접 추가(+)/편집(✎)/삭제(✕)하며,
+/// 클릭 시 직전 창에 본문 붙여넣기, 드래그 시 텍스트로 드롭. 헤더 ▾로 다른 그룹 팝업으로 전환한다.</summary>
 public partial class PromptPopup : Window
 {
     public event Action<PromptItem>? PromptSelected;
     public event Action<PromptItem>? PromptEditRequested;
     public event Action<PromptItem>? PromptDeleteRequested;
     public event Action? PromptAddRequested;
+    public event Action<FrameworkElement>? GroupSwitchRequested; // 헤더 ▾ 클릭(앱이 그룹 메뉴 표시)
     public event Action? PinChanged;   // 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
+    public event Action? Moved;        // 핀 이동 핸들 드래그 종료(앱이 핀 위치 저장)
     public event Action? DragFailed;   // 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>팝업 핀(자동 닫힘 해제). true면 외부 클릭/앱 활성화에도 닫지 않음.</summary>
     public bool Pinned { get; private set; }
+
+    /// <summary>이 팝업이 표시하는 그룹.</summary>
+    public PromptGroup? Group { get; private set; }
 
     public PromptPopup()
     {
         InitializeComponent();
     }
 
-    public void SetItems(IEnumerable<PromptItem> items) => PromptList.ItemsSource = items;
+    /// <summary>표시할 그룹 바인딩(헤더 그룹명 + 항목 목록).</summary>
+    public void SetGroup(PromptGroup g)
+    {
+        Group = g;
+        DataContext = g; // 헤더 GroupName 이 Name 에 바인딩
+        PromptList.ItemsSource = g.Items;
+    }
 
     private void Add_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
         PromptAddRequested?.Invoke();
+    }
+
+    private void Switch_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        GroupSwitchRequested?.Invoke((FrameworkElement)sender);
     }
 
     private void PinToggle_Changed(object sender, RoutedEventArgs e)
@@ -52,6 +69,9 @@ public partial class PromptPopup : Window
         Left = Math.Max(wa.Left, Math.Min(wa.Right - ActualWidth, Left + e.HorizontalChange));
         Top = Math.Max(wa.Top, Math.Min(wa.Bottom - ActualHeight, Top + e.VerticalChange));
     }
+
+    private void MoveHandle_DragCompleted(object sender, DragCompletedEventArgs e)
+        => Moved?.Invoke(); // 드래그가 끝난 위치를 앱이 그룹 핀 위치로 저장
 
     // ── 카드 드래그: 프롬프트 본문을 OS 드래그로 끌어내 에디터 등에 텍스트로 드롭 ──
     private Point _cardDragStart;
@@ -177,5 +197,32 @@ public partial class PromptPopup : Window
         // 상단 정렬(기본) 또는 아래 모서리 정렬(위로 자람)
         double top = alignBottom ? anchor.Top + anchor.ActualHeight - ActualHeight : anchor.Top;
         Top = Math.Max(wa.Top, Math.Min(top, wa.Bottom - ActualHeight));
+    }
+
+    /// <summary>영속된 핀 복원: 저장 위치(x,y)로 이동 + 핀 토글을 켠 채 표시. 좌표가 NaN이면 위치는 건드리지 않는다.
+    /// 모니터 구성이 바뀌었을 수 있으므로 가상 화면 안으로 클램프한다.</summary>
+    public void ShowPinnedAt(double x, double y)
+    {
+        if (!double.IsNaN(x) && !double.IsNaN(y))
+        {
+            double vl = SystemParameters.VirtualScreenLeft, vt = SystemParameters.VirtualScreenTop;
+            double vr = vl + SystemParameters.VirtualScreenWidth, vb = vt + SystemParameters.VirtualScreenHeight;
+            Left = Math.Max(vl, Math.Min(x, vr - Width));
+            Top = Math.Max(vt, Math.Min(y, vb - MinHeight));
+        }
+        PinToggle.IsChecked = true; // PinChanged 발화 — 표시 전이라 위치 저장은 건너뜀(앱 핸들러가 IsVisible 검사)
+        Show();
+    }
+
+    /// <summary>그룹 전환: 다른 팝업이 있던 자리(왼쪽·아래 모서리 기준)에 이 팝업을 대신 표시.
+    /// 높이가 달라도 아래 모서리를 맞춰 도크·경로 팝업을 덮지 않는다.</summary>
+    public void ShowReplacing(Window other)
+    {
+        Show();
+        UpdateLayout(); // SizeToContent 높이 확정 후 정렬
+        var wa = ScreenUtil.WorkAreaDip(other);
+        Left = Math.Max(wa.Left, Math.Min(other.Left, wa.Right - ActualWidth));
+        double bottom = other.Top + other.ActualHeight;
+        Top = Math.Max(wa.Top, Math.Min(bottom - ActualHeight, wa.Bottom - ActualHeight));
     }
 }
