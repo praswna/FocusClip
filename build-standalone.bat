@@ -24,6 +24,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Guard: publish can fail without a caught errorlevel (e.g. "No .NET SDKs were found").
+if not exist "%TMP%\FocusClip.exe" (
+    echo.
+    echo === BUILD FAILED: publish produced no exe ===
+    echo Check that the .NET 8 SDK is installed:  dotnet --list-sdks
+    pause
+    exit /b 1
+)
+
 echo === Deploying as FocusClip-Standalone.exe ===
 if not exist "%DEPLOY%" mkdir "%DEPLOY%"
 move /y "%TMP%\FocusClip.exe" "%DEPLOY%\FocusClip-Standalone.exe" >nul

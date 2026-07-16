@@ -25,6 +25,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Guard: publish can fail without a caught errorlevel (e.g. "No .NET SDKs were found"
+rem from the dotnet host). Never report OK / launch unless the exe actually exists.
+if not exist "%DEPLOY%\FocusClip.exe" (
+    echo.
+    echo === BUILD FAILED: %DEPLOY%\FocusClip.exe was not produced ===
+    echo Check that the .NET 8 SDK is installed:  dotnet --list-sdks
+    pause
+    exit /b 1
+)
+
 echo === Removing build intermediates ===
 dotnet build-server shutdown >nul 2>&1
 if exist "bin" rmdir /s /q "bin"

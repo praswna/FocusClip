@@ -21,6 +21,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Guard: build can fail without a caught errorlevel (e.g. "No .NET SDKs were found").
+if not exist "%~dp0bin\Debug\net8.0-windows\FocusClip.exe" (
+    echo.
+    echo === BUILD FAILED: exe was not produced ===
+    echo Check that the .NET 8 SDK is installed:  dotnet --list-sdks
+    pause
+    exit /b 1
+)
+
 echo === Launching FocusClip (Debug) ===
 start "" "%~dp0bin\Debug\net8.0-windows\FocusClip.exe"
 
