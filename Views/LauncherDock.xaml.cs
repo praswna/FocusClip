@@ -26,6 +26,8 @@ public partial class LauncherDock : Window
     public event Action? AddRequested;
     /// <summary>[✕] 버튼 클릭 → 프로그램 종료 요청.</summary>
     public event Action? ExitRequested;
+    /// <summary>[A/a] 버튼 클릭 → 대소문자(CapsLock) 전환 요청(App이 합성 키로 실제 토글 수행).</summary>
+    public event Action? CapsToggleRequested;
 
     private const double SepGapPx = 8; // 구분선 좌우 여백(경계 컨테이너 좌측 여백)
 
@@ -183,6 +185,24 @@ public partial class LauncherDock : Window
     private void AddButton_Click(object sender, RoutedEventArgs e) => AddRequested?.Invoke();
 
     private void ExitButton_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke();
+
+    // ── [A/a] 대소문자 전환 ──
+
+    private bool _caps;
+
+    /// <summary>현재 CapsLock 상태를 글리프에 반영한다(도크를 띄울 때마다 호출).</summary>
+    public void SetCaps(bool caps)
+    {
+        _caps = caps;
+        CapsGlyph.Text = _caps ? "A" : "a";
+        CapsGlyph.Foreground = _caps ? (Brush)FindResource("AccentBrush") : Brushes.White;
+    }
+
+    private void CapsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetCaps(!_caps); // 즉시 반영(예측) — 실제 토글은 App이 합성 키로 수행
+        CapsToggleRequested?.Invoke();
+    }
 
     // 도크 배경에 드롭 = 순서 유지(제거 방지). Move 로 처리해 None 이 되지 않게 한다.
     private void Surface_DragOver(object sender, DragEventArgs e)

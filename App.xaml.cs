@@ -38,7 +38,6 @@ public partial class App : Application
     private PathPopup? _pathPopup;
     private PromptPopup? _promptPopup;
     private Toast? _toast;
-    private CapsIndicator? _capsIndicator;
     private DispatcherTimer? _refreshTimer;
     private DispatcherTimer? _outsidePoll;   // 오토클로즈: 외부 클릭 감지
     private DateTime _overlayShownAt;
@@ -136,6 +135,7 @@ public partial class App : Application
         _dock.AppRemoveRequested += app => { _apps.Remove(app); OnAppsChanged(); };
         // 드래그가 구분선을 넘으면 고정 개수 갱신(저장은 뒤따르는 AppsReordered→OnAppsChanged가 처리).
         _dock.PinnedCountChanged += n => _configSvc.Config.PinnedCount = n;
+        _dock.CapsToggleRequested += () => NativeMethods.ToggleCapsLock(); // [A/a] → 대소문자 전환(후크는 무시)
         _dock.AddRequested += () => Dispatcher.BeginInvoke(OpenSettings); // [+] → 설정 열기
         _dock.ExitRequested += () => Dispatcher.BeginInvoke(ExitApp);      // [✕] → 프로그램 종료
         _dock.SetPinnedCount(_configSvc.Config.PinnedCount);
@@ -167,8 +167,6 @@ public partial class App : Application
     private void SetupClipboard()
     {
         _toast = new Toast();
-        _capsIndicator = new CapsIndicator();
-        _capsIndicator.ToggleRequested += () => NativeMethods.ToggleCapsLock(); // 클릭 → 대소문자 전환(후크는 무시)
         _clipboard.LoadHistory();// 고정해 둔 클립만 복원(미고정은 메모리 전용) — Start() 전에
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
@@ -299,7 +297,7 @@ public partial class App : Application
         _prevForeground = NativeMethods.GetForegroundWindow(); // 붙여넣기 대상 기억
         RefreshActiveStates(); // 비동기 — 표시를 막지 않고, 활성 표시(IsActive)는 도크 표시 직후 한 틱 내 갱신
         _dock!.ShowAtCursor();
-        _capsIndicator?.ShowAligned(_dock, CapsOn()); // 도크 왼쪽에 같은 높이로 대소문자 표시(클릭 전환)
+        _dock.SetCaps(CapsOn()); // 도크 안 [A/a] 버튼에 현재 대소문자 상태 반영
         if (_clipboard.Items.Count > 0) _clipPopup!.ShowAbove(_dock); // 클립이 있을 때만 도크 위에
         if (_clipboard.Paths.Count > 0) // 경로가 있을 때만 도크 아래에(클립 팝업과 겹치지 않게)
         {
@@ -325,7 +323,6 @@ public partial class App : Application
     private void HideOverlay(bool force = false)
     {
         _dock?.Hide();
-        _capsIndicator?.Hide(); // 대소문자 인디케이터는 항상 오버레이와 함께 닫힌다(핀 대상 아님)
         if (force || !(_clipPopup?.Pinned ?? false)) _clipPopup?.Hide();
         if (force || !(_pathPopup?.Pinned ?? false)) _pathPopup?.Hide();
         if (force || !(_promptPopup?.Pinned ?? false)) _promptPopup?.Hide();
@@ -356,9 +353,8 @@ public partial class App : Application
             bool outsidePopup = !popupVisible || _clipPopup == null || CursorOutside(_clipPopup);
             bool outsidePath = !pathVisible || _pathPopup == null || CursorOutside(_pathPopup);
             bool outsidePrompt = !promptVisible || _promptPopup == null || CursorOutside(_promptPopup);
-            bool capsVisible = _capsIndicator?.IsVisible ?? false;
-            bool outsideCaps = !capsVisible || _capsIndicator == null || CursorOutside(_capsIndicator);
-            if (outsideDock && outsidePopup && outsidePath && outsidePrompt && outsideCaps) HideOverlay(force: false);
+            // 대소문자 버튼은 도크 안에 있으므로 outsideDock 판정에 이미 포함된다.
+            if (outsideDock && outsidePopup && outsidePath && outsidePrompt) HideOverlay(force: false);
         }
         catch { /* 30ms 타이머는 절대 앱을 죽이지 않게 */ }
     }
