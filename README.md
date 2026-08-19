@@ -18,7 +18,7 @@
 [![최신 릴리스](https://img.shields.io/github/v/release/praswna/FocusClip?label=latest&sort=semver)](https://github.com/praswna/FocusClip/releases/latest) · Windows 10/11 x64
 
 - ⬇️ **[FocusClip-Standalone.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip-Standalone.exe)** — .NET 설치 불필요, 단독 실행 (대부분 이걸 받으세요)
-- ⬇️ **[FocusClip.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip.exe)** — 경량(~0.5 MB), .NET 10 Desktop Runtime 필요
+- ⬇️ **[FocusClip.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip.exe)** — 경량(~0.5 MB), [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) 필요 (SDK 가 아니라 **Desktop** Runtime)
 
 ## 어떻게 쓰나
 
@@ -61,7 +61,11 @@ build-standalone.bat    # 배포: FocusClip-Standalone.exe (~170 MB, 단독 실�
 ```
 
 VS Code 는 `.vscode/launch.json` 이 들어 있어 **F5** 로 빌드·실행·디버그가 된다
-(확장: C# Dev Kit, SDK: .NET 10).
+(확장: `ms-dotnettools.csharp`).
+
+빌드에는 **.NET 10 SDK**, 실행에는 **.NET 10 Desktop Runtime**(`Microsoft.WindowsDesktop.App`)이
+따로 필요하다 — SDK 만으로는 빌드는 되지만 WPF 앱이 뜨지 않는다.
+`dotnet --list-runtimes` 로 확인할 수 있고, `dev.bat`·`build.bat` 이 시작할 때 둘 다 검사한다.
 
 배포 위치는 `%LOCALAPPDATA%\FocusClip\app\`. 배포 전용 옵션은 `csproj`가 아니라 bat 명령줄로만 전달한다(일반 `dotnet build`를 빠르게 유지).
 
