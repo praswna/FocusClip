@@ -60,6 +60,9 @@ build.bat               # 배포: FocusClip.exe (~0.5 MB, .NET 10 필요)
 build-standalone.bat    # 배포: FocusClip-Standalone.exe (~170 MB, 단독 실행)
 ```
 
+VS Code 는 `.vscode/launch.json` 이 들어 있어 **F5** 로 빌드·실행·디버그가 된다
+(확장: C# Dev Kit, SDK: .NET 10).
+
 배포 위치는 `%LOCALAPPDATA%\FocusClip\app\`. 배포 전용 옵션은 `csproj`가 아니라 bat 명령줄로만 전달한다(일반 `dotnet build`를 빠르게 유지).
 
 ## 내력

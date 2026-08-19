@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // 디버그 빌드는 bin\Debug 의 exe 를 덮어쓴다. 트레이에 이전 인스턴스가
+      // 남아 있으면 파일이 잠겨 빌드가 실패하므로 먼저 종료시킨다(dev.bat 과 동일).
+      // taskkill 은 대상이 없으면 128 을 돌려주므로 exit 0 으로 정리한다.
+      "label": "kill-focusclip",
+      "type": "process",
+      "command": "cmd",
+      "args": ["/c", "taskkill /IM FocusClip.exe /F >nul 2>&1 & exit 0"],
+      "presentation": { "reveal": "never", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "build",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/FocusClip.csproj",
+        "-c",
+        "Debug",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "dependsOn": ["kill-focusclip"],
+      "dependsOrder": "sequence",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}
