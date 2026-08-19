@@ -8,7 +8,7 @@ where dotnet >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo === ERROR: 'dotnet' not found on PATH ===
-    echo Install the .NET 8 SDK ^(the SDK, not just the runtime^):
+    echo Install the .NET 10 SDK ^(the SDK, not just the runtime^):
     echo   https://aka.ms/dotnet/download
     pause
     exit /b 1
@@ -20,7 +20,7 @@ for /f "delims=" %%v in ('dotnet --list-sdks 2^>nul') do set "FC_SDK=1"
 if not defined FC_SDK (
     echo.
     echo === ERROR: .NET runtime is installed but no SDK ===
-    echo Install the .NET 8 SDK ^(x64^):
+    echo Install the .NET 10 SDK ^(x64^):
     echo   https://aka.ms/dotnet/download
     pause
     exit /b 1

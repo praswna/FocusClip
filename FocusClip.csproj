@@ -2,11 +2,11 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <!-- 트레이 아이콘은 내장 WinForms NotifyIcon 사용 (외부 의존성 0, .NET8 완전 호환) -->
+    <!-- 트레이 아이콘은 내장 WinForms NotifyIcon 사용 (외부 의존성 0, .NET10 완전 호환) -->
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>FocusClip</AssemblyName>
     <RootNamespace>FocusClip</RootNamespace>

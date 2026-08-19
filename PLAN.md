@@ -1,7 +1,7 @@
 # FocusClip 개발 계획서
 
 ## 목표
-FocusClip — 런처(FocusManager) + 클립보드(Clipboard-Manager)를 통합한 .NET 8 WPF 트레이 앱.
+FocusClip — 런처(FocusManager) + 클립보드(Clipboard-Manager)를 통합한 .NET 10 WPF 트레이 앱.
 원본 FM/CM 동작을 충실히 재현하면서 기능을 점진적으로 개선한다.
 
 ---

@@ -2,7 +2,7 @@
 
 # FocusClip
 
-여러 프로그램을 오가며 작업할 때 **앱 전환**과 **클립보드**를 `CapsLock` 한 번으로 빠르게 다루는 Windows 트레이 유틸리티. C# / .NET 8 / WPF.
+여러 프로그램을 오가며 작업할 때 **앱 전환**과 **클립보드**를 `CapsLock` 한 번으로 빠르게 다루는 Windows 트레이 유틸리티. C# / .NET 10 / WPF.
 
 <p align="center">
   <img src="sidebar.png" alt="사이드바" height="380">
@@ -18,7 +18,7 @@
 [![최신 릴리스](https://img.shields.io/github/v/release/praswna/FocusClip?label=latest&sort=semver)](https://github.com/praswna/FocusClip/releases/latest) · Windows 10/11 x64
 
 - ⬇️ **[FocusClip-Standalone.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip-Standalone.exe)** — .NET 설치 불필요, 단독 실행 (대부분 이걸 받으세요)
-- ⬇️ **[FocusClip.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip.exe)** — 경량(~0.5 MB), .NET 8 Runtime 필요
+- ⬇️ **[FocusClip.exe](https://github.com/praswna/FocusClip/releases/latest/download/FocusClip.exe)** — 경량(~0.5 MB), .NET 10 Desktop Runtime 필요
 
 ## 어떻게 쓰나
 
@@ -56,7 +56,7 @@
 
 ```
 dev.bat                 # 개발용 증분 빌드 + 실행
-build.bat               # 배포: FocusClip.exe (~0.5 MB, .NET 8 필요)
+build.bat               # 배포: FocusClip.exe (~0.5 MB, .NET 10 필요)
 build-standalone.bat    # 배포: FocusClip-Standalone.exe (~170 MB, 단독 실행)
 ```
 
