@@ -45,6 +45,21 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
+    // 로우레벨 마우스 후크 (사이드바 자동 숨김: 화면 왼쪽 가장자리 진입 감지)
+    public const int WH_MOUSE_LL = 14;
+    public const int WM_MOUSEMOVE = 0x0200;
+
+    // MSLLHOOKSTRUCT 의 선두 8바이트가 POINT pt(x, y) 다. 후크 콜백은 마우스가
+    // 움직일 때마다 시스템 전역에서 불리므로 구조체 전체를 마샬링하지 않고
+    // Marshal.ReadInt32 로 필요한 두 필드만 직접 읽는다.
+    public const int MSLLHOOKSTRUCT_X_OFFSET = 0;
+    public const int MSLLHOOKSTRUCT_Y_OFFSET = 4;
+
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnhookWindowsHookEx(IntPtr hhk);

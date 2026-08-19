@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
@@ -21,6 +22,7 @@ public partial class SettingsWindow : Window
     private readonly ObservableCollection<AppEntry> _running = new();
     private bool _capturingHotkey;
     private bool _suppressPinned;
+    private bool _suppressHideDelay;
     private bool _suppressRc;
     private bool _suppressFm;
     private Point _dragStart;
@@ -47,6 +49,15 @@ public partial class SettingsWindow : Window
         SidebarCheck.IsChecked = _cfg.Config.SidebarEnabled;
         SidebarCheck.Checked += (_, _) => { _cfg.Config.SidebarEnabled = true; _cfg.Save(); _onChanged(); };
         SidebarCheck.Unchecked += (_, _) => { _cfg.Config.SidebarEnabled = false; _cfg.Save(); _onChanged(); };
+
+        SidebarAutoHideCheck.IsChecked = _cfg.Config.SidebarAutoHide;
+        SidebarAutoHideCheck.Checked += (_, _) => { _cfg.Config.SidebarAutoHide = true; _cfg.Save(); _onChanged(); };
+        SidebarAutoHideCheck.Unchecked += (_, _) => { _cfg.Config.SidebarAutoHide = false; _cfg.Save(); _onChanged(); };
+
+        // 설정은 ms 로 저장하고 입력은 초 단위로 받는다(1~60초).
+        _suppressHideDelay = true;
+        SidebarHideDelayBox.Text = (_cfg.Config.SidebarHideDelayMs / 1000.0).ToString("0.#", CultureInfo.InvariantCulture);
+        _suppressHideDelay = false;
 
         HotkeyButton.Content = VkName(_cfg.Config.HotkeyVk);
         _suppressPinned = true;
@@ -187,6 +198,21 @@ public partial class SettingsWindow : Window
             _suppressPinned = false;
         }
         _cfg.Config.PinnedCount = clamped;
+        _cfg.Save();
+        _onChanged();
+    }
+
+    private void HideDelayBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+        => e.Handled = !e.Text.All(c => char.IsDigit(c) || c == '.');
+
+    private void HideDelayBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_suppressHideDelay) return;
+        if (!double.TryParse(SidebarHideDelayBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double sec))
+            return; // 입력 도중("." 만 친 상태 등)에는 손대지 않는다
+        // 자동 숨김 자체를 끄는 건 체크박스 몫이므로 여기서 0 은 허용하지 않는다.
+        double clamped = Math.Max(1, Math.Min(60, sec));
+        _cfg.Config.SidebarHideDelayMs = (int)Math.Round(clamped * 1000);
         _cfg.Save();
         _onChanged();
     }

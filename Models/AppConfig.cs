@@ -19,6 +19,8 @@ public class AppConfig
     public int PinnedCount { get; set; } = 4;     // 앞쪽 N개 = 사이드바 고정 + 숫자키 대상
     public bool StartupRegistered { get; set; } = false; // 첫 실행 시 자동시작 1회 등록 완료 여부
     public bool SidebarEnabled { get; set; } = true; // 왼쪽 고정 사이드바 표시 여부(기본 ON)
+    public bool SidebarAutoHide { get; set; } = true; // 일정 시간 뒤 사이드바 자동 숨김(기본 ON). 끄면 상시 표시.
+    public int SidebarHideDelayMs { get; set; } = 3000; // 자동 숨김까지의 대기 시간(ms). 마우스가 벗어난 시점부터 잰다.
     public string FileManagerPath { get; set; } = ""; // 폴더 열기에 쓸 파일 관리자 exe(예: Q-Dir). 비우면 기본 탐색기.
     public string FileManagerArgs { get; set; } = "\"%path%\""; // 파일 관리자 실행 인자 템플릿. %path%가 폴더 경로로 치환됨.
     // 저장 정책은 핀 기반(미고정=메모리, 고정=파일)으로 고정 — 별도 설정 없음. (옛 MemoryOnly 필드는 제거됨)

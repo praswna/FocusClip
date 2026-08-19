@@ -43,6 +43,16 @@
             <CheckBox x:Name="SidebarCheck" Content="왼쪽 사이드바 표시"
                       Foreground="White" Margin="0,0,0,8"/>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <CheckBox x:Name="SidebarAutoHideCheck" Content="자동 숨김"
+                          Foreground="White" VerticalAlignment="Center" Width="80"/>
+                <TextBox x:Name="SidebarHideDelayBox" Width="56" Background="{StaticResource Bg2Brush}"
+                         Foreground="White" BorderBrush="{StaticResource LineBrush}" Padding="4,2"
+                         PreviewTextInput="HideDelayBox_PreviewTextInput" TextChanged="HideDelayBox_TextChanged"/>
+                <TextBlock Text="초 뒤 숨김 · 화면 왼쪽 끝에 마우스를 대면 다시 나옴"
+                           Foreground="{StaticResource GrayBrush}"
+                           VerticalAlignment="Center" Margin="10,0,0,0"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <TextBlock Text="단축키" VerticalAlignment="Center" Width="64"/>
                 <Button x:Name="HotkeyButton" Content="CapsLock" Width="150"
                         HorizontalContentAlignment="Center" Click="Hotkey_Click"/>

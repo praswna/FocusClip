@@ -158,9 +158,10 @@ public partial class App : Application
         int n = Math.Min(_configSvc.Config.PinnedCount, _apps.Count);
         _sidebar = new Sidebar();
         _sidebar.SetApps(_apps.Take(n).ToList());
-        _sidebar.AppActivated += app => _windows.ActivateOrRun(app); // 항상 표시 → 숨기지 않음
+        _sidebar.AppActivated += app => _windows.ActivateOrRun(app); // 클릭해도 사이드바는 그대로(자동 숨김 타이머가 처리)
         _sidebar.AppRightClicked += OnAppRightClicked;
         if (_configSvc.Config.SidebarEnabled) _sidebar.Show(); // 설정에서 끄면 표시 안 함
+        _sidebar.ApplyAutoHide(_configSvc.Config.SidebarAutoHide, _configSvc.Config.SidebarHideDelayMs);
     }
 
     private void SetupClipboard()
@@ -656,12 +657,12 @@ public partial class App : Application
             {
                 int n = Math.Min(_configSvc.Config.PinnedCount, _apps.Count);
                 _sidebar.SetApps(_apps.Take(n).ToList());
-                _sidebar.Show();              // 설정에서 켜면 표시
-                _sidebar.PositionLeftCenter();
+                _sidebar.ShowSidebar();       // 설정에서 켜면 표시(자동 숨김 중이면 물러난 상태 유지)
+                _sidebar.ApplyAutoHide(_configSvc.Config.SidebarAutoHide, _configSvc.Config.SidebarHideDelayMs);
             }
             else
             {
-                _sidebar.Hide();              // 설정에서 끄면 숨김
+                _sidebar.HideSidebar();       // 설정에서 끄면 숨김
             }
         }
         _dock?.SetPinnedCount(_configSvc.Config.PinnedCount); // 구분선 위치 갱신(F2)
