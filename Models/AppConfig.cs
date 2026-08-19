@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace FocusClip.Models;
@@ -30,4 +31,17 @@ public class AppConfig
     public DockRightClickAction RightClickAction { get; set; } = DockRightClickAction.AlwaysOnTop;
 
     public List<AppEntry> Apps { get; set; } = new();
+
+    /// <summary>깊은 복사본. 설정창이 「취소」로 되돌릴 스냅샷을 뜨는 데 쓴다.
+    /// JSON 왕복이라 설정 항목이 늘어도 따라온다(AppEntry 의 UI 전용 속성은 JsonIgnore 라 빠진다).</summary>
+    public AppConfig Clone() => JsonSerializer.Deserialize<AppConfig>(JsonSerializer.Serialize(this))!;
+
+    /// <summary>스냅샷의 값으로 되돌린다. 인스턴스를 교체하지 않고 값만 덮어써
+    /// 이 객체를 들고 있는 쪽(App 등)의 참조가 그대로 유효하게 둔다.
+    /// 리플렉션이라 설정 항목이 늘어도 되돌리기에서 빠지지 않는다.</summary>
+    public void CopyFrom(AppConfig other)
+    {
+        foreach (var p in typeof(AppConfig).GetProperties())
+            if (p.CanRead && p.CanWrite) p.SetValue(this, p.GetValue(other));
+    }
 }

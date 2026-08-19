@@ -27,6 +27,13 @@
                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
             </StackPanel>
         </DataTemplate>
+
+        <!-- 순서 변경 드래그 중 "여기에 놓입니다" 표시. 항목 컨테이너 위/아래 테두리로 그린다. -->
+        <Style x:Key="ReorderItem" TargetType="ListBoxItem">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="12">
@@ -119,8 +126,13 @@
             <ListBox x:Name="RegisteredList" Grid.Column="0" Margin="0,0,3,0"
                      ItemTemplate="{StaticResource AppItem}"
                      AllowDrop="True"
+                     ItemContainerStyle="{StaticResource ReorderItem}"
                      Drop="RegisteredList_Drop"
-                     DragOver="RegisteredList_DragOver"/>
+                     DragOver="RegisteredList_DragOver"
+                     DragLeave="RegisteredList_DragLeave"
+                     PreviewMouseLeftButtonDown="RegisteredList_MouseDown"
+                     PreviewMouseMove="RegisteredList_MouseMove"
+                     ToolTip="드래그로 순서 변경 (앞쪽 N개가 고정 구간)"/>
             <ListBox x:Name="RunningList" Grid.Column="1" Margin="3,0,0,0"
                      ItemTemplate="{StaticResource AppItem}"
                      PreviewMouseLeftButtonDown="RunningList_MouseDown"
@@ -137,7 +149,8 @@
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                 <Button Content="◀ 선택 추가" Click="Add_Click"/>
                 <Button Content="선택 제거" Click="Remove_Click"/>
-                <Button Content="닫기" Click="Close_Click"/>
+                <Button Content="저장" Click="Save_Click" IsDefault="True" Margin="16,0,4,0"/>
+                <Button Content="취소" Click="Cancel_Click" IsCancel="True"/>
             </StackPanel>
         </DockPanel>
     </Grid>
