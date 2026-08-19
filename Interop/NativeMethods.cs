@@ -22,6 +22,7 @@ internal static class NativeMethods
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_NOACTIVATE = 0x08000000;
+    public const int WS_EX_TRANSPARENT = 0x00000020; // 히트테스트 제외 → 마우스 입력이 아래 창으로 통과
 
     [StructLayout(LayoutKind.Sequential)]
     public struct KBDLLHOOKSTRUCT
@@ -219,6 +220,16 @@ internal static class NativeMethods
     {
         long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
         ex |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(ex));
+    }
+
+    /// <summary>창을 마우스 입력에 대해 투명하게(혹은 원래대로) 만든다.
+    /// 자동 숨김된 사이드바가 화면 끝에 남기는 1px 표시선이 그 자리의 클릭을
+    /// 가로채지 않도록 하는 데 쓴다 — 보이기만 하고 입력은 아래 창으로 통과한다.</summary>
+    public static void SetClickThrough(IntPtr hwnd, bool on)
+    {
+        long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
+        ex = on ? (ex | WS_EX_TRANSPARENT) : (ex & ~(long)WS_EX_TRANSPARENT);
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(ex));
     }
 }

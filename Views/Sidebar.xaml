@@ -34,6 +34,7 @@
         </Style>
     </Window.Resources>
 
+  <Grid>
     <Border Background="{StaticResource BgBrush}"
             BorderBrush="{StaticResource NeonBrush}"
             BorderThickness="1"
@@ -111,4 +112,11 @@
         </Thumb>
         </StackPanel>
     </Border>
+
+    <!-- 자동 숨김으로 물러났을 때 화면 끝에 남는 1px 표시선.
+         창의 오른쪽 끝 1px 만 화면 안에 걸치도록 배치하므로 이 띠가 그 자리를 채운다.
+         (본체 테두리는 CornerRadius 때문에 위아래가 둥글게 잘려 선이 끊겨 보인다) -->
+    <Rectangle x:Name="PeekStrip" Width="1" HorizontalAlignment="Right"
+               Fill="{StaticResource NeonBrush}" Visibility="Collapsed"/>
+  </Grid>
 </Window>

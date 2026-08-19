@@ -15,8 +15,9 @@ namespace FocusClip.Views;
 
 /// <summary>
 /// 화면 왼쪽 가장자리의 고정 앱 사이드바 (FM의 사이드바 대응).
-/// 자동 숨김이 켜져 있으면 마우스가 벗어나고 일정 시간 뒤 화면 밖으로 미끄러져 사라지고,
-/// 다시 왼쪽 가장자리에 마우스를 대면 미끄러져 나온다(작업표시줄 자동 숨김과 동일한 감각).
+/// 자동 숨김이 켜져 있으면 마우스가 벗어나고 일정 시간 뒤 화면 밖으로 미끄러져 물러나되
+/// 화면 끝에 네온색 1px 표시선만 남기고, 그 자리에 마우스를 대면 다시 미끄러져 나온다.
+/// 물러나 있는 동안에는 창을 클릭 통과 상태로 만들어 1px 선이 그 자리의 클릭을 가로채지 않게 한다.
 /// </summary>
 public partial class Sidebar : Window
 {
@@ -25,6 +26,7 @@ public partial class Sidebar : Window
 
     private const double SlideMs = 140;   // 미끄러지는 시간
     private const double EdgeGap = 2;     // 펼쳐졌을 때 화면 왼쪽 끝과의 간격(DIP)
+    private const double PeekDip = 1;     // 물러났을 때 화면 안에 남기는 표시선 두께(DIP)
     private const double BandPadDip = 12; // 가장자리 감지 세로 구간 여유(DIP)
 
     private bool _userMovedY; // 사용자가 핸들로 세로 위치를 옮겼는지(이후 자동 센터링 안 함)
@@ -100,15 +102,19 @@ public partial class Sidebar : Window
     {
         _hideTimer.Stop();
         _edge.Uninstall();
+        SetClickThrough(false);
+        PeekStrip.Visibility = Visibility.Collapsed;
         _hidden = false;
         Hide();
     }
 
     // ── 자동 숨김 ──
 
-    /// <summary>펼쳐졌을 때의 X. 화면 밖으로 물러났을 때의 X 는 창 너비만큼 더 왼쪽.</summary>
+    /// <summary>펼쳐졌을 때의 X.</summary>
     private double ShownLeft => WorkArea.Left + EdgeGap;
-    private double HiddenLeft => WorkArea.Left - ActualWidth - 4;
+
+    /// <summary>물러났을 때의 X. 창의 오른쪽 끝 PeekDip 만큼만 화면 안에 남는다.</summary>
+    private double HiddenLeft => WorkArea.Left + PeekDip - ActualWidth;
 
     private static Rect WorkArea => SystemParameters.WorkArea;
 
@@ -119,10 +125,13 @@ public partial class Sidebar : Window
         if (IsMouseOver) { RestartHideTimer(); return; }
 
         _hidden = true;
+        // 본체 테두리는 둥근 모서리 때문에 위아래가 잘리므로, 남는 1px 은 전용 띠로 그린다.
+        PeekStrip.Visibility = Visibility.Visible;
         SlideTo(HiddenLeft, () =>
         {
-            // 실제로 창을 감춰야 다른 앱의 Alt+Tab/최대화 영역에 영향을 주지 않는다.
-            Hide();
+            // 창을 Hide 하지 않고 1px 만 걸친 채로 둔다(표시선을 보여야 하므로).
+            // 대신 클릭 통과로 만들어 화면 끝을 겨냥한 다른 앱 조작을 막지 않는다.
+            SetClickThrough(true);
             UpdateEdgeBand();
             _edge.Install();
         });
@@ -133,12 +142,23 @@ public partial class Sidebar : Window
         if (!_hidden) return;
         _hidden = false;
         _edge.Uninstall();
+        SetClickThrough(false);
+        PeekStrip.Visibility = Visibility.Collapsed;
 
-        // 먼저 화면 밖 위치로 옮긴 뒤 보여야 최종 위치에서 한 프레임 번쩍이지 않는다.
-        SetLeftDirect(HiddenLeft);
-        Show();
+        // 설정에서 사이드바를 껐다 켠 직후 등 창이 숨겨져 있을 수 있다.
+        if (!IsVisible)
+        {
+            SetLeftDirect(HiddenLeft); // 먼저 물러난 위치로 옮겨야 최종 위치에서 한 프레임 번쩍이지 않는다
+            Show();
+        }
         ReassertTopmost();
         SlideTo(ShownLeft, RestartHideTimer);
+    }
+
+    /// <summary>물러나 있는 동안 마우스 입력을 아래 창으로 통과시킨다.</summary>
+    private void SetClickThrough(bool on)
+    {
+        if (_hwnd != IntPtr.Zero) NativeMethods.SetClickThrough(_hwnd, on);
     }
 
     /// <summary>가장자리 감지 영역을 현재 사이드바 위치에 맞춘다(물리 px).</summary>
