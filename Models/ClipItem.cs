@@ -18,7 +18,14 @@ public class ClipItem : INotifyPropertyChanged
     public string Text                                  // 텍스트 내용(이미지면 빈 문자열)
     {
         get => _text;
-        set { _text = value; OnPropertyChanged(); OnPropertyChanged(nameof(Snippet)); }
+        set
+        {
+            _text = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Snippet));
+            OnPropertyChanged(nameof(PinTitle));   // 고정 팝업 압축 카드도 함께 갱신(편집으로 본문이 바뀌는 경우)
+            OnPropertyChanged(nameof(PinSubtitle));
+        }
     }
 
     public string? FilePath { get; set; }               // 저장된 이미지 PNG 경로(복사 시 재로드)
@@ -50,6 +57,30 @@ public class ClipItem : INotifyPropertyChanged
 
     public string TimeLabel => Time.ToString("yyyy-MM-dd HH:mm:ss");
     public string Snippet => IsImage ? "" : (Text.Length > 300 ? Text[..300] : Text);
+
+    // ── 고정(핀) 팝업 압축 카드 표시 ──
+    /// <summary>압축 카드의 주 텍스트 — 경로=파일·폴더명, 이미지=라벨, 텍스트=한 줄로 접은 요약.</summary>
+    public string PinTitle => IsPath ? PathName : IsImage ? "이미지" : OneLine(Text);
+
+    /// <summary>압축 카드의 보조(흐린) 텍스트 — 경로=축약 디렉터리, 그 외=복사 시각.</summary>
+    public string PinSubtitle => IsPath ? PathDir : Time.ToString("MM-dd HH:mm");
+
+    /// <summary>줄바꿈·연속 공백을 공백 하나로 접어 한 줄로 만든다 — 압축 카드 높이를 항목마다 일정하게 유지.
+    /// (TextBlock 은 TextWrapping=NoWrap 이어도 개행 문자에서 줄을 바꾸므로 텍스트 자체를 접어야 한다.)</summary>
+    private static string OneLine(string text)
+    {
+        string t = text.Length > 200 ? text[..200] : text; // 카드에 보이는 길이만 처리(긴 본문 전체를 훑지 않음)
+        var sb = new System.Text.StringBuilder(t.Length);
+        bool gap = false;
+        foreach (char ch in t)
+        {
+            if (char.IsWhiteSpace(ch)) { gap = true; continue; }
+            if (gap && sb.Length > 0) sb.Append(' ');
+            gap = false;
+            sb.Append(ch);
+        }
+        return sb.ToString();
+    }
 
     // ── 경로 항목 함축 표시 ──
     /// <summary>http(s) URL 여부.</summary>

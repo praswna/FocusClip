@@ -45,7 +45,8 @@ public partial class ClipboardPopup : Window
     public void SetItems(IEnumerable<ClipItem> items)
     {
         _view = CollectionViewSource.GetDefaultView(items);
-        _view.Filter = o => o is ClipItem c && _filter switch
+        // 고정(📌)된 카드는 오른쪽 고정 팝업(PinnedPopup)이 압축 카드로 맡는다 — 여기는 미고정 카드만.
+        _view.Filter = o => o is ClipItem c && !c.Pinned && _filter switch
         {
             ClipFilter.Text => !c.IsImage,
             ClipFilter.Image => c.IsImage,
@@ -53,6 +54,9 @@ public partial class ClipboardPopup : Window
         };
         ClipList.ItemsSource = _view;
     }
+
+    /// <summary>핀 토글 후 목록을 다시 거른다(항목의 Pinned 변경은 컬렉션 변경이 아니라 뷰가 스스로 알아채지 못한다).</summary>
+    public void RefreshItems() => _view?.Refresh();
 
     // ── 텍스트/이미지 필터 토글 ──
     private void Filter_All_Checked(object sender, RoutedEventArgs e) => ApplyFilter(ClipFilter.All);

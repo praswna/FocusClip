@@ -229,22 +229,13 @@
                 <ItemsControl x:Name="ClipList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
+                            <!-- 고정 카드는 이 목록에 오지 않는다(오른쪽 고정 팝업이 압축 카드로 표시) -->
                             <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
+                                    Background="{StaticResource Bg2Brush}"
                                     MouseLeftButtonUp="Card_Click"
                                     PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown"
                                     PreviewMouseMove="Card_PreviewMouseMove"
                                     Tag="{Binding}">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="{StaticResource Bg2Brush}"/>
-                                        <Style.Triggers>
-                                            <!-- 핀된 카드: 좌측 액센트 느낌(배경 살짝 강조) -->
-                                            <DataTrigger Binding="{Binding Pinned}" Value="True">
-                                                <Setter Property="Background" Value="#FF143A37"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*"/>
@@ -298,7 +289,7 @@
                                             </Button.Style>
                                         </Button>
                                         <Button Style="{StaticResource CardPin}" Click="Pin_Click"
-                                                Tag="{Binding}" ToolTip="고정"/>
+                                                Tag="{Binding}" ToolTip="고정(오른쪽 고정 팝업으로 이동)"/>
                                         <Button Style="{StaticResource CardOpen}" Click="Open_Click"
                                                 Tag="{Binding}" ToolTip="저장 위치 열기"/>
                                         <Button Style="{StaticResource CardX}" Click="Delete_Click"

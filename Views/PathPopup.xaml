@@ -179,23 +179,14 @@
                 <ItemsControl x:Name="PathList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
+                            <!-- 고정 경로는 이 목록에 오지 않는다(오른쪽 고정 팝업이 압축 카드로 표시) -->
                             <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
+                                    Background="{StaticResource Bg2Brush}"
                                     PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown"
                                     PreviewMouseMove="Card_PreviewMouseMove"
                                     MouseLeftButtonUp="Card_Click"
                                     Tag="{Binding}"
                                     ToolTip="{Binding Text}">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="{StaticResource Bg2Brush}"/>
-                                        <Style.Triggers>
-                                            <!-- 핀된 경로: 배경 강조(클립 카드와 동일) -->
-                                            <DataTrigger Binding="{Binding Pinned}" Value="True">
-                                                <Setter Property="Background" Value="#FF143A37"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
                                 <Grid>
                                     <StackPanel Margin="0,0,22,0">
                                         <StackPanel.Style>
@@ -216,7 +207,7 @@
                                     <StackPanel Orientation="Vertical"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top">
                                         <Button Style="{StaticResource CardPin}" Click="Pin_Click"
-                                                Tag="{Binding}" ToolTip="고정"/>
+                                                Tag="{Binding}" ToolTip="고정(오른쪽 고정 팝업으로 이동)"/>
                                         <Button Style="{StaticResource CardOpen}" Click="Open_Click"
                                                 Tag="{Binding}" ToolTip="열기"/>
                                         <Button Style="{StaticResource CardX}" Click="Delete_Click"
