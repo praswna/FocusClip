@@ -16,13 +16,13 @@ namespace FocusClip.Views;
 
 /// <summary>고정(📌)한 항목만 모아 관리하는 압축 팝업. 클립보드·경로 팝업이 각각 하나씩 쓰며,
 /// 기본 팝업 오른쪽에 뜬다. 기본 팝업은 미고정 항목만 보여주므로 고정 카드가 목록을 잡아먹지 않는다.
-/// 카드는 썸네일+두 줄 텍스트의 한 줄짜리 압축 형태고, 동작(클릭=붙여넣기, 드래그=드롭)은 기본 팝업과 같다.</summary>
+/// 카드는 썸네일+두 줄 텍스트의 한 줄짜리 압축 형태고, 동작(클립 클릭=붙여넣기·경로 클릭=열기, 드래그=드롭)은 기본 팝업과 같다.</summary>
 public partial class PinnedPopup : Window
 {
-    public event Action<ClipItem>? ItemSelected;      // 클릭 → 클립보드 복사 + 직전 창에 붙여넣기
+    public event Action<ClipItem>? ItemSelected;      // 클립 카드 클릭·경로 카드 📋 → 붙여넣기
     public event Action<ClipItem>? UnpinRequested;    // 📌 → 고정 해제(기본 팝업으로 돌아감)
     public event Action<ClipItem>? DeleteRequested;   // ✕ → 목록에서 제거
-    public event Action<ClipItem>? OpenRequested;     // 📂/↗ → 저장 위치 열기 / 경로·URL 열기
+    public event Action<ClipItem>? OpenRequested;     // 클립 📂 → 저장 위치 열기 / 경로 카드 클릭 → 경로·URL 열기
     public event Action<ClipItem>? EditRequested;     // ✎ → 텍스트·이미지 편집(클립 전용)
     public event Action<ClipItem>? PromoteRequested;  // 🔖 → 프롬프트 보관함으로(텍스트 클립 전용)
     public event Action? PinChanged;                  // 팝업 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
@@ -146,9 +146,19 @@ public partial class PinnedPopup : Window
         return false;
     }
 
+    /// <summary>카드 클릭 — 클립은 붙여넣기, 경로는 열기(기본 팝업과 같은 규칙).</summary>
     private void Card_Click(object sender, MouseButtonEventArgs e)
     {
         if (_cardDragHappened) { _cardDragHappened = false; return; } // 드래그였으면 복사 안 함
+        if (sender is not FrameworkElement fe || fe.Tag is not ClipItem item) return;
+        if (item.IsPath) OpenRequested?.Invoke(item);
+        else ItemSelected?.Invoke(item);
+    }
+
+    /// <summary>경로 카드의 📋 — 클릭이 '열기'로 갔으므로 붙여넣기는 이 버튼으로.</summary>
+    private void Paste_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; // 카드 선택(열기)으로 전파 방지
         if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
             ItemSelected?.Invoke(item);
     }

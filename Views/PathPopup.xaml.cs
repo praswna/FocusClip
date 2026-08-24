@@ -16,9 +16,9 @@ namespace FocusClip.Views;
 /// <summary>복사된 파일 경로 전용 팝업. 함축 표시(이름+축약 경로), 클릭 시 전체 경로 붙여넣기, 드래그 시 텍스트로 드롭.</summary>
 public partial class PathPopup : Window
 {
-    public event Action<ClipItem>? PathSelected;
+    public event Action<ClipItem>? PathSelected;      // 📋 → 클립보드 복사 + 직전 창에 붙여넣기
     public event Action<ClipItem>? PathDeleteRequested;
-    public event Action<ClipItem>? PathOpenRequested; // 로컬 경로/URL 열기
+    public event Action<ClipItem>? PathOpenRequested; // 카드 클릭 → 로컬 경로/URL 열기(기본 동작)
     public event Action<ClipItem>? PathPinToggled;    // 카드 고정핀 토글
     public event Action? PinChanged;                  // 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
     public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
@@ -135,30 +135,31 @@ public partial class PathPopup : Window
         return false;
     }
 
+    /// <summary>카드 클릭 = 경로/URL 열기(기본 동작). 붙여넣기는 📋 버튼으로 분리했다.</summary>
     private void Card_Click(object sender, MouseButtonEventArgs e)
     {
         if (_cardDragHappened) { _cardDragHappened = false; return; }
+        if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
+            PathOpenRequested?.Invoke(item);
+    }
+
+    private void Paste_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; // 카드 선택(열기)으로 전파 방지
         if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
             PathSelected?.Invoke(item);
     }
 
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
-        e.Handled = true; // 카드 선택(붙여넣기)으로 전파 방지
+        e.Handled = true; // 카드 선택(열기)으로 전파 방지
         if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
             PathDeleteRequested?.Invoke(item);
     }
 
-    private void Open_Click(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true; // 카드 선택(붙여넣기)으로 전파 방지
-        if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
-            PathOpenRequested?.Invoke(item);
-    }
-
     private void Pin_Click(object sender, RoutedEventArgs e)
     {
-        e.Handled = true; // 카드 선택(붙여넣기)으로 전파 방지
+        e.Handled = true; // 카드 선택(열기)으로 전파 방지
         if (sender is FrameworkElement fe && fe.Tag is ClipItem item)
             PathPinToggled?.Invoke(item);
     }

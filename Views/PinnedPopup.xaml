@@ -85,7 +85,7 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 경로 전용 버튼(클립 항목에서는 숨김) -->
+        <!-- 경로 전용 버튼(클립 항목에서는 숨김) — 경로 카드는 클릭이 '열기'라 붙여넣기를 버튼으로 둔다 -->
         <Style x:Key="PathOnlyBtn" TargetType="Button" BasedOn="{StaticResource MiniBtn}">
             <Setter Property="Visibility" Value="Collapsed"/>
             <Style.Triggers>
@@ -159,7 +159,8 @@
                 <ItemsControl x:Name="PinList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <!-- 압축 카드: 썸네일(이미지) + 두 줄 텍스트 + 버튼 한 줄 → 높이 고정(기본 팝업 카드의 1/3) -->
+                            <!-- 압축 카드: 썸네일(이미지) + 두 줄 텍스트 + 버튼 한 줄 → 높이 고정(기본 팝업 카드의 1/3).
+                                 클릭은 기본 팝업과 동일 — 클립은 붙여넣기, 경로는 열기. -->
                             <Border CornerRadius="5" Margin="0,1" Padding="5,3" Cursor="Hand"
                                     Background="#FF143A37"
                                     MouseLeftButtonUp="Card_Click"
@@ -219,8 +220,8 @@
                                                 Click="Promote_Click" Tag="{Binding}" ToolTip="프롬프트로 저장"/>
                                         <Button Style="{StaticResource ClipOnlyBtn}" Content="📂"
                                                 Click="Open_Click" Tag="{Binding}" ToolTip="저장 위치 열기"/>
-                                        <Button Style="{StaticResource PathOnlyBtn}" Content="↗"
-                                                Click="Open_Click" Tag="{Binding}" ToolTip="열기"/>
+                                        <Button Style="{StaticResource PathOnlyBtn}" Content="📋"
+                                                Click="Paste_Click" Tag="{Binding}" ToolTip="붙여넣기(직전 창)"/>
                                         <Button Style="{StaticResource MiniDelBtn}" Content="✕"
                                                 Click="Delete_Click" Tag="{Binding}" ToolTip="삭제"/>
                                     </StackPanel>

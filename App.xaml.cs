@@ -599,9 +599,10 @@ public partial class App : Application
     }
 
     // ── 경로/URL 열기(셸 실행: 로컬은 탐색기/기본앱, URL은 기본 브라우저) ──
+    // 경로 카드의 주 동작(클릭)이므로 클립 붙여넣기와 같게 force:false — 사용자가 고정핀을 건 팝업은 남긴다.
     private void OnPathOpen(ClipItem item)
     {
-        HideOverlay(force: true);
+        HideOverlay();
         if (!item.CheckPathExists()) // 클릭 시점 최신 확인(이동/삭제된 로컬 경로)
         {
             _toast?.ShowToast("경로를 찾을 수 없음");
