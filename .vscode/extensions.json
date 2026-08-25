@@ -1,0 +1,8 @@
+{
+  // ms-dotnettools.csharp 하나면 빌드·실행·디버깅(coreclr)이 모두 된다. 로그인 불필요.
+  // csdevkit 은 솔루션 탐색기 등 편의 기능을 더하지만 Microsoft 계정 로그인이 필요하므로
+  // 권장 목록에서 뺐다. 필요하면 각자 설치할 것.
+  "recommendations": [
+    "ms-dotnettools.csharp"
+  ]
+}

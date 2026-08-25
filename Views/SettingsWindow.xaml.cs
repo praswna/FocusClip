@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using FocusClip.Models;
 using FocusClip.Services;
@@ -21,10 +24,26 @@ public partial class SettingsWindow : Window
     private readonly ObservableCollection<AppEntry> _running = new();
     private bool _capturingHotkey;
     private bool _suppressPinned;
+    private bool _suppressHideDelay;
     private bool _suppressRc;
     private bool _suppressFm;
     private Point _dragStart;
     private bool _dragging;
+
+    // 「취소」로 되돌릴 스냅샷. 창을 여는 순간의 상태를 떠 둔다.
+    // 앱 목록은 Clone() 이 아니라 인스턴스 그대로 담는다 — 아이콘 등 UI 전용 속성이
+    // JsonIgnore 라 복제본에는 없기 때문에, 되돌릴 때 원래 인스턴스를 그대로 복원해야 한다.
+    private readonly AppConfig _snapConfig;
+    private readonly List<AppEntry> _snapApps;
+    private readonly bool _snapStartup;
+    private bool _dirty;          // 저장할 변경이 있는지(창 닫기 시 확인 여부 판단)
+    private bool _closingHandled; // 저장/취소 버튼이 이미 처리함 → OnClosing 에서 다시 묻지 않게
+
+    // 등록 목록 안에서의 순서 변경 드래그. 실행 중 목록에서 넘어오는 '추가' 드래그와
+    // 구분해야 해서 전용 데이터 포맷을 쓴다.
+    private const string ReorderFormat = "FocusClip.ReorderApps";
+    private Point _regDragStart;
+    private bool _regDragging;
 
     public SettingsWindow(ConfigService cfg, IconService icons,
         ObservableCollection<AppEntry> registered, Action onChanged,
@@ -40,13 +59,28 @@ public partial class SettingsWindow : Window
         RegisteredList.ItemsSource = _registered;
         RunningList.ItemsSource = _running;
 
-        StartupCheck.IsChecked = StartupService.IsEnabled();
-        StartupCheck.Checked += (_, _) => StartupService.SetEnabled(true);
-        StartupCheck.Unchecked += (_, _) => StartupService.SetEnabled(false);
+        // 변경은 즉시 화면에 반영하되(미리보기) 디스크 저장은 「저장」까지 미룬다.
+        // 「취소」는 이 스냅샷으로 되돌린다.
+        _snapConfig = _cfg.Config.Clone();
+        _snapApps = _registered.ToList();
+        _snapStartup = StartupService.IsEnabled();
+
+        StartupCheck.IsChecked = _snapStartup;
+        StartupCheck.Checked += (_, _) => { StartupService.SetEnabled(true); _dirty = true; };
+        StartupCheck.Unchecked += (_, _) => { StartupService.SetEnabled(false); _dirty = true; };
 
         SidebarCheck.IsChecked = _cfg.Config.SidebarEnabled;
-        SidebarCheck.Checked += (_, _) => { _cfg.Config.SidebarEnabled = true; _cfg.Save(); _onChanged(); };
-        SidebarCheck.Unchecked += (_, _) => { _cfg.Config.SidebarEnabled = false; _cfg.Save(); _onChanged(); };
+        SidebarCheck.Checked += (_, _) => { _cfg.Config.SidebarEnabled = true; Touch(); };
+        SidebarCheck.Unchecked += (_, _) => { _cfg.Config.SidebarEnabled = false; Touch(); };
+
+        SidebarAutoHideCheck.IsChecked = _cfg.Config.SidebarAutoHide;
+        SidebarAutoHideCheck.Checked += (_, _) => { _cfg.Config.SidebarAutoHide = true; Touch(); };
+        SidebarAutoHideCheck.Unchecked += (_, _) => { _cfg.Config.SidebarAutoHide = false; Touch(); };
+
+        // 설정은 ms 로 저장하고 입력은 초 단위로 받는다(1~60초).
+        _suppressHideDelay = true;
+        SidebarHideDelayBox.Text = (_cfg.Config.SidebarHideDelayMs / 1000.0).ToString("0.#", CultureInfo.InvariantCulture);
+        _suppressHideDelay = false;
 
         HotkeyButton.Content = VkName(_cfg.Config.HotkeyVk);
         _suppressPinned = true;
@@ -100,8 +134,8 @@ public partial class SettingsWindow : Window
         if (vk == 0) return;
 
         _cfg.Config.HotkeyVk = vk;
-        _cfg.Save();
-        _onHotkeyChanged?.Invoke(vk);
+        _dirty = true;
+        _onHotkeyChanged?.Invoke(vk); // 미리보기 — 디스크 저장은 「저장」에서
 
         _capturingHotkey = false;
         HotkeyButton.Content = VkName(vk);
@@ -134,14 +168,14 @@ public partial class SettingsWindow : Window
     {
         if (_suppressFm) return;
         _cfg.Config.FileManagerPath = FileManagerBox.Text.Trim();
-        _cfg.Save();
+        _dirty = true;
     }
 
     private void FileManagerArgsBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
         if (_suppressFm) return;
         _cfg.Config.FileManagerArgs = FileManagerArgsBox.Text;
-        _cfg.Save();
+        _dirty = true;
     }
 
     private void BrowseFileManager_Click(object sender, RoutedEventArgs e)
@@ -152,7 +186,7 @@ public partial class SettingsWindow : Window
             Filter = "실행 파일 (*.exe)|*.exe|모든 파일 (*.*)|*.*",
             CheckFileExists = true,
         };
-        if (dlg.ShowDialog(this) == true) FileManagerBox.Text = dlg.FileName; // TextChanged가 저장
+        if (dlg.ShowDialog(this) == true) FileManagerBox.Text = dlg.FileName; // TextChanged가 반영
     }
 
     private void ClearFileManager_Click(object sender, RoutedEventArgs e) => FileManagerBox.Text = "";
@@ -165,7 +199,7 @@ public partial class SettingsWindow : Window
             && Enum.TryParse<DockRightClickAction>(s, out var act))
         {
             _cfg.Config.RightClickAction = act;
-            _cfg.Save();
+            _dirty = true;
         }
     }
 
@@ -187,8 +221,21 @@ public partial class SettingsWindow : Window
             _suppressPinned = false;
         }
         _cfg.Config.PinnedCount = clamped;
-        _cfg.Save();
-        _onChanged();
+        Touch();
+    }
+
+    private void HideDelayBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+        => e.Handled = !e.Text.All(c => char.IsDigit(c) || c == '.');
+
+    private void HideDelayBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_suppressHideDelay) return;
+        if (!double.TryParse(SidebarHideDelayBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double sec))
+            return; // 입력 도중("." 만 친 상태 등)에는 손대지 않는다
+        // 자동 숨김 자체를 끄는 건 체크박스 몫이므로 여기서 0 은 허용하지 않는다.
+        double clamped = Math.Max(1, Math.Min(60, sec));
+        _cfg.Config.SidebarHideDelayMs = (int)Math.Round(clamped * 1000);
+        Touch();
     }
 
     private void RefreshRunning()
@@ -243,11 +290,10 @@ public partial class SettingsWindow : Window
         Persist();
     }
 
+    /// <summary>앱 목록 변경을 화면에 반영한다. 디스크 저장은 「저장」에서 한 번에 한다.</summary>
     private void Persist()
     {
-        _cfg.Config.Apps = _registered.ToList();
-        _cfg.Save();
-        _onChanged();
+        Touch();
         RefreshRunning();
     }
 
@@ -274,13 +320,37 @@ public partial class SettingsWindow : Window
 
     private void RegisteredList_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(typeof(List<AppEntry>))
-            ? DragDropEffects.Move : DragDropEffects.None;
+        if (e.Data.GetDataPresent(ReorderFormat))
+        {
+            e.Effects = DragDropEffects.Move;
+            ShowInsertMark(DropIndexAt(e.GetPosition(RegisteredList)));
+        }
+        else
+        {
+            e.Effects = e.Data.GetDataPresent(typeof(List<AppEntry>))
+                ? DragDropEffects.Move : DragDropEffects.None;
+        }
         e.Handled = true;
     }
 
+    private void RegisteredList_DragLeave(object sender, DragEventArgs e) => ShowInsertMark(-1);
+
     private void RegisteredList_Drop(object sender, DragEventArgs e)
     {
+        ShowInsertMark(-1);
+
+        // 등록 목록 안에서 끌었다 → 순서 변경
+        if (e.Data.GetDataPresent(ReorderFormat))
+        {
+            if (e.Data.GetData(ReorderFormat) is List<AppEntry> moving && moving.Count > 0)
+            {
+                ReorderTo(moving, DropIndexAt(e.GetPosition(RegisteredList)));
+                Touch(); // 실행 중 목록은 바뀌지 않으므로 RefreshRunning 은 하지 않는다
+            }
+            return;
+        }
+
+        // 실행 중 목록에서 끌어왔다 → 추가
         if (!e.Data.GetDataPresent(typeof(List<AppEntry>))) return;
         foreach (var sel in (List<AppEntry>)e.Data.GetData(typeof(List<AppEntry>)))
         {
@@ -291,8 +361,141 @@ public partial class SettingsWindow : Window
         Persist();
     }
 
+    // ── 드래그로 순서 바꾸기 (RegisteredList 안에서) ──
+
+    private void RegisteredList_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _regDragStart = e.GetPosition(null);
+        _regDragging = false;
+    }
+
+    private void RegisteredList_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _regDragging) return;
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _regDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _regDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        var items = RegisteredList.SelectedItems.Cast<AppEntry>().ToList();
+        if (items.Count == 0) return;
+
+        _regDragging = true;
+        var data = new DataObject(ReorderFormat, items);
+        DragDrop.DoDragDrop(RegisteredList, data, DragDropEffects.Move);
+        _regDragging = false;
+        ShowInsertMark(-1);
+    }
+
+    /// <summary>커서 Y 위치에 해당하는 삽입 인덱스. 항목의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤.</summary>
+    private int DropIndexAt(Point pt)
+    {
+        for (int i = 0; i < _registered.Count; i++)
+        {
+            if (RegisteredList.ItemContainerGenerator.ContainerFromIndex(i) is not ListBoxItem lbi) continue;
+            if (lbi.ActualHeight <= 0) continue;
+            double top = lbi.TranslatePoint(new Point(0, 0), RegisteredList).Y;
+            if (pt.Y < top + lbi.ActualHeight / 2) return i;
+        }
+        return _registered.Count; // 마지막 항목보다 아래 → 맨 끝
+    }
+
+    /// <summary>삽입 위치를 항목 테두리로 표시한다. index=-1 이면 모두 지운다.</summary>
+    private void ShowInsertMark(int index)
+    {
+        for (int i = 0; i < _registered.Count; i++)
+        {
+            if (RegisteredList.ItemContainerGenerator.ContainerFromIndex(i) is not ListBoxItem lbi) continue;
+            // 맨 끝에 놓는 경우만 마지막 항목의 '아래' 선으로 표시한다.
+            double top = index == i ? 2 : 0;
+            double bottom = index == _registered.Count && i == _registered.Count - 1 ? 2 : 0;
+            lbi.BorderThickness = new Thickness(0, top, 0, bottom);
+        }
+    }
+
+    /// <summary>선택 항목들을 targetIndex 자리로 옮긴다(서로의 상대 순서는 유지).</summary>
+    private void ReorderTo(List<AppEntry> moving, int targetIndex)
+    {
+        // 현재 순서대로 정렬해 두어야 여러 개를 옮겨도 자기들끼리의 순서가 보존된다.
+        var ordered = moving.Where(_registered.Contains)
+                            .OrderBy(_registered.IndexOf)
+                            .ToList();
+        if (ordered.Count == 0) return;
+
+        // 옮길 항목 중 목표 위치보다 앞에 있던 것들은 제거되면서 인덱스를 당기므로 그만큼 보정한다.
+        int insert = targetIndex - ordered.Count(a => _registered.IndexOf(a) < targetIndex);
+
+        foreach (var a in ordered) _registered.Remove(a);
+
+        insert = Math.Max(0, Math.Min(_registered.Count, insert));
+        foreach (var a in ordered) _registered.Insert(insert++, a);
+
+        RegisteredList.SelectedItems.Clear();
+        foreach (var a in ordered) RegisteredList.SelectedItems.Add(a);
+    }
+
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshRunning();
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    // ── 저장 / 취소 ──
+
+    /// <summary>변경을 화면에 즉시 반영(미리보기)하고 저장 대상으로 표시한다.</summary>
+    private void Touch()
+    {
+        _dirty = true;
+        _onChanged();
+    }
+
+    private void Save_Click(object sender, RoutedEventArgs e)
+    {
+        SaveChanges();
+        _closingHandled = true;
+        Close();
+    }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e)
+    {
+        RevertChanges();
+        _closingHandled = true;
+        Close();
+    }
+
+    private void SaveChanges()
+    {
+        _cfg.Config.Apps = _registered.ToList();
+        _cfg.Save();
+        _dirty = false;
+    }
+
+    /// <summary>창을 열던 시점의 상태로 되돌리고 화면에 반영한다.</summary>
+    private void RevertChanges()
+    {
+        if (!_dirty) return;
+
+        _cfg.Config.CopyFrom(_snapConfig);
+        // CopyFrom 이 넣은 Apps 는 JSON 복제본이라 아이콘이 없다 → 원래 인스턴스로 되돌린다.
+        _cfg.Config.Apps = _snapApps.ToList();
+
+        _registered.Clear();
+        foreach (var a in _snapApps) _registered.Add(a);
+
+        if (StartupService.IsEnabled() != _snapStartup) StartupService.SetEnabled(_snapStartup);
+
+        _onHotkeyChanged?.Invoke(_cfg.Config.HotkeyVk); // 단축키도 되돌려 다시 걸어야 한다
+        _onChanged();
+        _dirty = false;
+    }
+
+    /// <summary>제목표시줄 X 로 닫을 때. 저장/취소 버튼이 이미 처리했으면 그냥 닫는다.</summary>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_closingHandled && _dirty)
+        {
+            var r = MessageBox.Show(this, "변경사항을 저장할까요?", "FocusClip 설정",
+                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (r == MessageBoxResult.Cancel) { e.Cancel = true; return; }
+            if (r == MessageBoxResult.Yes) SaveChanges(); else RevertChanges();
+        }
+        base.OnClosing(e);
+    }
 
     // ── Config(데이터) 폴더 열기 ── 설정된 파일 관리자(Q-Dir 등)가 있으면 그것으로, 없으면 기본 탐색기.
     private void OpenConfig_Click(object sender, RoutedEventArgs e)

@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FocusClip 실행 (Debug)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/bin/Debug/net10.0-windows/FocusClip.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    },
+    {
+      // 이미 떠 있는 FocusClip(배포판 포함)에 붙는다. 후크가 걸린 상태로
+      // 중단점을 밟으면 윈도우가 후크를 떼어버리므로 로그 중단점 위주로 쓸 것.
+      "name": "FocusClip 프로세스에 연결",
+      "type": "coreclr",
+      "request": "attach"
+    }
+  ]
+}

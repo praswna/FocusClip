@@ -40,7 +40,6 @@ public partial class App : Application
     private PinnedPopup? _clipPinPopup;   // 고정한 클립만 모아 관리(클립 팝업 오른쪽)
     private PinnedPopup? _pathPinPopup;   // 고정한 경로만 모아 관리(경로 팝업 오른쪽)
     private Toast? _toast;
-    private CapsIndicator? _capsIndicator;
     private DispatcherTimer? _refreshTimer;
     private DispatcherTimer? _outsidePoll;   // 오토클로즈: 외부 클릭 감지
     private DateTime _overlayShownAt;
@@ -138,6 +137,7 @@ public partial class App : Application
         _dock.AppRemoveRequested += app => { _apps.Remove(app); OnAppsChanged(); };
         // 드래그가 구분선을 넘으면 고정 개수 갱신(저장은 뒤따르는 AppsReordered→OnAppsChanged가 처리).
         _dock.PinnedCountChanged += n => _configSvc.Config.PinnedCount = n;
+        _dock.CapsToggleRequested += () => NativeMethods.ToggleCapsLock(); // [A/a] → 대소문자 전환(후크는 무시)
         _dock.AddRequested += () => Dispatcher.BeginInvoke(OpenSettings); // [+] → 설정 열기
         _dock.ExitRequested += () => Dispatcher.BeginInvoke(ExitApp);      // [✕] → 프로그램 종료
         _dock.SetPinnedCount(_configSvc.Config.PinnedCount);
@@ -160,16 +160,15 @@ public partial class App : Application
         int n = Math.Min(_configSvc.Config.PinnedCount, _apps.Count);
         _sidebar = new Sidebar();
         _sidebar.SetApps(_apps.Take(n).ToList());
-        _sidebar.AppActivated += app => _windows.ActivateOrRun(app); // 항상 표시 → 숨기지 않음
+        _sidebar.AppActivated += app => _windows.ActivateOrRun(app); // 클릭해도 사이드바는 그대로(자동 숨김 타이머가 처리)
         _sidebar.AppRightClicked += OnAppRightClicked;
         if (_configSvc.Config.SidebarEnabled) _sidebar.Show(); // 설정에서 끄면 표시 안 함
+        _sidebar.ApplyAutoHide(_configSvc.Config.SidebarAutoHide, _configSvc.Config.SidebarHideDelayMs);
     }
 
     private void SetupClipboard()
     {
         _toast = new Toast();
-        _capsIndicator = new CapsIndicator();
-        _capsIndicator.ToggleRequested += () => NativeMethods.ToggleCapsLock(); // 클릭 → 대소문자 전환(후크는 무시)
         _clipboard.LoadHistory();// 고정해 둔 클립만 복원(미고정은 메모리 전용) — Start() 전에
         _clipboard.Start();
         _clipboard.ItemAdded += item => Dispatcher.BeginInvoke(() =>
@@ -378,7 +377,7 @@ public partial class App : Application
         _prevForeground = NativeMethods.GetForegroundWindow(); // 붙여넣기 대상 기억
         RefreshActiveStates(); // 비동기 — 표시를 막지 않고, 활성 표시(IsActive)는 도크 표시 직후 한 틱 내 갱신
         _dock!.ShowAtCursor();
-        _capsIndicator?.ShowAligned(_dock, CapsOn()); // 도크 왼쪽에 같은 높이로 대소문자 표시(클릭 전환)
+        _dock.SetCaps(CapsOn()); // 도크 안 [A/a] 버튼에 현재 대소문자 상태 반영
         LayoutPopups();
         _hotkey!.CaptureExtraKeys = true;
         _overlayShownAt = DateTime.Now;
@@ -432,7 +431,6 @@ public partial class App : Application
     private void HideOverlay(bool force = false)
     {
         _dock?.Hide();
-        _capsIndicator?.Hide(); // 대소문자 인디케이터는 항상 오버레이와 함께 닫힌다(핀 대상 아님)
         foreach (var p in Popups())
             if (force || !IsPopupPinned(p)) p.Hide();
         if (_hotkey != null) _hotkey.CaptureExtraKeys = false;
@@ -455,9 +453,8 @@ public partial class App : Application
 
             bool outsideDock = !dockVisible || _dock == null || CursorOutside(_dock);
             bool outsidePopups = Popups().All(p => !p.IsVisible || CursorOutside(p));
-            bool capsVisible = _capsIndicator?.IsVisible ?? false;
-            bool outsideCaps = !capsVisible || _capsIndicator == null || CursorOutside(_capsIndicator);
-            if (outsideDock && outsidePopups && outsideCaps) HideOverlay(force: false);
+            // 대소문자 버튼은 도크 안에 있으므로 outsideDock 판정에 이미 포함된다.
+            if (outsideDock && outsidePopups) HideOverlay(force: false);
         }
         catch { /* 30ms 타이머는 절대 앱을 죽이지 않게 */ }
     }
@@ -752,12 +749,12 @@ public partial class App : Application
             {
                 int n = Math.Min(_configSvc.Config.PinnedCount, _apps.Count);
                 _sidebar.SetApps(_apps.Take(n).ToList());
-                _sidebar.Show();              // 설정에서 켜면 표시
-                _sidebar.PositionLeftCenter();
+                _sidebar.ShowSidebar();       // 설정에서 켜면 표시(자동 숨김 중이면 물러난 상태 유지)
+                _sidebar.ApplyAutoHide(_configSvc.Config.SidebarAutoHide, _configSvc.Config.SidebarHideDelayMs);
             }
             else
             {
-                _sidebar.Hide();              // 설정에서 끄면 숨김
+                _sidebar.HideSidebar();       // 설정에서 끄면 숨김
             }
         }
         _dock?.SetPinnedCount(_configSvc.Config.PinnedCount); // 구분선 위치 갱신(F2)

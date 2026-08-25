@@ -22,6 +22,7 @@ internal static class NativeMethods
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_NOACTIVATE = 0x08000000;
+    public const int WS_EX_TRANSPARENT = 0x00000020; // 히트테스트 제외 → 마우스 입력이 아래 창으로 통과
 
     [StructLayout(LayoutKind.Sequential)]
     public struct KBDLLHOOKSTRUCT
@@ -44,6 +45,21 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    // 로우레벨 마우스 후크 (사이드바 자동 숨김: 화면 왼쪽 가장자리 진입 감지)
+    public const int WH_MOUSE_LL = 14;
+    public const int WM_MOUSEMOVE = 0x0200;
+
+    // MSLLHOOKSTRUCT 의 선두 8바이트가 POINT pt(x, y) 다. 후크 콜백은 마우스가
+    // 움직일 때마다 시스템 전역에서 불리므로 구조체 전체를 마샬링하지 않고
+    // Marshal.ReadInt32 로 필요한 두 필드만 직접 읽는다.
+    public const int MSLLHOOKSTRUCT_X_OFFSET = 0;
+    public const int MSLLHOOKSTRUCT_Y_OFFSET = 4;
+
+    public delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -204,6 +220,16 @@ internal static class NativeMethods
     {
         long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
         ex |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(ex));
+    }
+
+    /// <summary>창을 마우스 입력에 대해 투명하게(혹은 원래대로) 만든다.
+    /// 자동 숨김된 사이드바가 화면 끝에 남기는 1px 표시선이 그 자리의 클릭을
+    /// 가로채지 않도록 하는 데 쓴다 — 보이기만 하고 입력은 아래 창으로 통과한다.</summary>
+    public static void SetClickThrough(IntPtr hwnd, bool on)
+    {
+        long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
+        ex = on ? (ex | WS_EX_TRANSPARENT) : (ex & ~(long)WS_EX_TRANSPARENT);
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, new IntPtr(ex));
     }
 }
