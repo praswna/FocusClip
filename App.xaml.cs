@@ -407,24 +407,41 @@ public partial class App : Application
         if (paths) pathPopup.ShowBelow(dock, clipPopup.IsVisible ? clipPopup : null); // 도크 아래
         else pathPopup.Hide();
 
-        // 클립 팝업이 도크 위(기본 위치)면 오른쪽 열은 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
-        bool alignBottom = clipPopup.IsVisible && clipPopup.Top < dock.Top;
-        Window clipAnchor = clipPopup.IsVisible ? clipPopup : dock;
-        Window pathAnchor = pathPopup.IsVisible ? pathPopup : dock;
+        // 오른쪽 열은 '클립/경로 팝업이 놓이는 자리' 기준으로 잡는다. 창이 아니라 자리를 기준으로 삼아야
+        // 클립·경로가 비어 팝업이 안 떠도 고정 팝업이 도크 옆으로 내려오지 않고 같은 열·같은 높이를 지킨다.
+        Rect clipSlot = PopupSlot(clipPopup, dock, above: true);
+        Rect pathSlot = PopupSlot(pathPopup, dock, above: false);
+        // 클립 자리가 도크 위(기본 위치)면 오른쪽 열은 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
+        bool alignBottom = clipSlot.Top < dock.Top;
 
-        // 고정 클립: 클립 팝업(없으면 도크) 오른쪽.
-        if (pinnedClips) _clipPinPopup?.ShowRightOf(clipAnchor, alignBottom);
+        // 고정 클립: 클립 팝업 자리 오른쪽.
+        if (pinnedClips) _clipPinPopup?.ShowRightOf(clipSlot, dock, alignBottom);
         else _clipPinPopup?.Hide();
 
-        // 고정 경로: 경로 팝업(없으면 도크) 오른쪽. 같은 열의 고정 클립 팝업과 세로로 겹치면 비켜 쌓는다.
-        if (pinnedPaths) _pathPinPopup?.ShowRightOf(pathAnchor, false, _clipPinPopup);
+        // 고정 경로: 경로 팝업 자리 오른쪽. 같은 열의 고정 클립 팝업과 세로로 겹치면 비켜 쌓는다.
+        if (pinnedPaths) _pathPinPopup?.ShowRightOf(pathSlot, dock, false, _clipPinPopup);
         else _pathPinPopup?.Hide();
 
         // 프롬프트: 경로·고정 팝업들의 오른쪽 끝 바깥. 비어 있으면 표시 안 함
         // — 첫 프롬프트는 클립 카드의 🔖(프롬프트로 저장) 또는 트레이 「프롬프트 추가」로 만든다.
         if (_prompts.Prompts.Count > 0)
-            _promptPopup?.ShowRightOf(clipAnchor, alignBottom, pathPopup, _clipPinPopup, _pathPinPopup);
+            _promptPopup?.ShowRightOf(clipSlot, dock, alignBottom, pathPopup, _clipPinPopup, _pathPinPopup);
         else _promptPopup?.Hide();
+    }
+
+    /// <summary>클립·경로 팝업이 차지하는 자리. 항목이 없어 떠 있지 않으면 '떴다면 차지했을' 자리를 돌려준다
+    /// — 도크 바로 위(above=true)/아래에 붙는, 폭만 있고 높이 0인 슬롯이다.
+    /// 오른쪽 열(고정·프롬프트 팝업)이 이 자리를 기준으로 놓이므로 기본 팝업이 비어도 위치가 그대로 유지된다.</summary>
+    private static Rect PopupSlot(Window popup, Window dock, bool above)
+    {
+        if (popup.IsVisible) return PopupPlacement.RectOf(popup);
+        double w = double.IsNaN(popup.Width) ? popup.ActualWidth : popup.Width; // 한 번도 안 뜬 창은 ActualWidth=0
+        var wa = ScreenUtil.WorkAreaDip(dock);
+        double left = Math.Max(wa.Left, Math.Min(dock.Left, wa.Right - w));     // ShowAbove/ShowBelow와 같은 클램프
+        double top = above
+            ? dock.Top - PopupPlacement.Gap                      // 위 슬롯: 아래 모서리가 도크 윗변에서 6px
+            : dock.Top + dock.ActualHeight + PopupPlacement.Gap; // 아래 슬롯: 위 모서리가 도크 아랫변에서 6px
+        return new Rect(left, top, w, 0);
     }
 
     /// <summary>오버레이 숨김. force=true(CapsLock·Esc)면 팝업 핀도 무시하고 닫는다(C1).</summary>

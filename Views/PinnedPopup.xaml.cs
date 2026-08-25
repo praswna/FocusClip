@@ -240,13 +240,15 @@ public partial class PinnedPopup : Window
         return IntPtr.Zero;
     }
 
-    /// <summary>기준 창(기본 팝업, 없으면 도크) 오른쪽에 배치. stackAvoid 와 세로로 겹치면 같은 열에서 비켜 쌓는다.</summary>
-    public void ShowRightOf(Window anchor, bool alignBottom = false, Window? stackAvoid = null)
+    /// <summary>기본 팝업이 놓이는(비어서 안 떠 있으면 놓였을) 자리 오른쪽에 배치.
+    /// 창이 아니라 자리(Rect)를 받는 덕에, 기본 팝업이 비어도 고정 팝업은 늘 같은 열·같은 높이에 뜬다.
+    /// stackAvoid 와 세로로 겹치면 같은 열에서 위/아래로 비켜 쌓는다.</summary>
+    public void ShowRightOf(Rect anchorSlot, Window monitorRef, bool alignBottom = false, Window? stackAvoid = null)
     {
         bool wasVisible = IsVisible;
         Show();
         UpdateCount();
         if (Pinned && wasVisible) return; // 핀+이미 표시 중이면 사용자가 옮긴 위치 유지(재배치 안 함)
-        PopupPlacement.PlaceRightOf(this, anchor, alignBottom, stackAvoid);
+        PopupPlacement.PlaceRightOf(this, anchorSlot, monitorRef, alignBottom, stackAvoid);
     }
 }
