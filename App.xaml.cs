@@ -408,7 +408,8 @@ public partial class App : Application
         else pathPopup.Hide();
 
         // 오른쪽 열은 '클립/경로 팝업이 놓이는 자리' 기준으로 잡는다. 창이 아니라 자리를 기준으로 삼아야
-        // 클립·경로가 비어 팝업이 안 떠도 고정 팝업이 도크 옆으로 내려오지 않고 같은 열·같은 높이를 지킨다.
+        // 클립·경로가 비어도 고정 팝업이 도크 옆으로 내려오지 않고 같은 세로 위치를 지키고,
+        // 가로로는 빈 자리(폭 0) 덕에 도크 왼쪽에 정렬됐다가 기본 팝업이 생기면 그만큼 오른쪽으로 밀린다.
         Rect clipSlot = PopupSlot(clipPopup, dock, above: true);
         Rect pathSlot = PopupSlot(pathPopup, dock, above: false);
         // 클립 자리가 도크 위(기본 위치)면 오른쪽 열은 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
@@ -429,19 +430,19 @@ public partial class App : Application
         else _promptPopup?.Hide();
     }
 
-    /// <summary>클립·경로 팝업이 차지하는 자리. 항목이 없어 떠 있지 않으면 '떴다면 차지했을' 자리를 돌려준다
-    /// — 도크 바로 위(above=true)/아래에 붙는, 폭만 있고 높이 0인 슬롯이다.
-    /// 오른쪽 열(고정·프롬프트 팝업)이 이 자리를 기준으로 놓이므로 기본 팝업이 비어도 위치가 그대로 유지된다.</summary>
+    /// <summary>클립·경로 팝업이 차지하는 자리. 오른쪽 열(고정·프롬프트 팝업)이 이 자리를 기준으로 놓인다.
+    /// 항목이 없어 떠 있지 않으면 폭 0의 빈 자리를 돌려준다 — 오른쪽 열이 도크 왼쪽 끝에 그대로 정렬되고,
+    /// 나중에 클립·경로가 생겨 기본 팝업이 뜨면 그 폭만큼 오른쪽으로 밀려난다.
+    /// 세로 위치는 팝업 유무와 무관하게 고정 — 위 슬롯은 도크 윗변에서 6px 위(아래 모서리 기준),
+    /// 아래 슬롯은 도크 아랫변에서 6px 아래(위 모서리 기준).</summary>
     private static Rect PopupSlot(Window popup, Window dock, bool above)
     {
         if (popup.IsVisible) return PopupPlacement.RectOf(popup);
-        double w = double.IsNaN(popup.Width) ? popup.ActualWidth : popup.Width; // 한 번도 안 뜬 창은 ActualWidth=0
-        var wa = ScreenUtil.WorkAreaDip(dock);
-        double left = Math.Max(wa.Left, Math.Min(dock.Left, wa.Right - w));     // ShowAbove/ShowBelow와 같은 클램프
         double top = above
             ? dock.Top - PopupPlacement.Gap                      // 위 슬롯: 아래 모서리가 도크 윗변에서 6px
             : dock.Top + dock.ActualHeight + PopupPlacement.Gap; // 아래 슬롯: 위 모서리가 도크 아랫변에서 6px
-        return new Rect(left, top, w, 0);
+        // 오른쪽 끝을 '도크 왼쪽 - 간격'에 두면 뒤이은 (오른쪽 끝 + 간격) 계산이 정확히 도크 왼쪽에 맞는다.
+        return new Rect(dock.Left - PopupPlacement.Gap, top, 0, 0);
     }
 
     /// <summary>오버레이 숨김. force=true(CapsLock·Esc)면 팝업 핀도 무시하고 닫는다(C1).</summary>
