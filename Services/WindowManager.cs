@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using FocusClip.Interop;
 using FocusClip.Models;
@@ -53,23 +54,42 @@ public sealed class WindowManager
         string nameNoExe = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
             ? app.ProcessName[..^4] : app.ProcessName;
         if (string.IsNullOrEmpty(nameNoExe)) return IntPtr.Zero;
+
+        // 대상 실행 파일명을 공유하는 모든 프로세스 ID 수집.
+        // 앱 활성화/항상위 토글마다 호출되므로, GetProcessesByName()가 돌려준 Process 객체(핸들 보유)는
+        // finally에서 전부 Dispose 해 핸들 누적을 막는다.
+        var pids = new HashSet<uint>();
         try
         {
-            // 앱 활성화/항상위 토글마다 호출되므로, GetProcessesByName()가 돌려준 Process 객체(핸들 보유)는
-            // 조기 return 여부와 무관하게 finally에서 전부 Dispose 해 핸들 누적을 막는다.
             var procs = Process.GetProcessesByName(nameNoExe);
-            try
-            {
-                foreach (var p in procs)
-                {
-                    IntPtr h = p.MainWindowHandle;
-                    if (h != IntPtr.Zero) return h;
-                }
-            }
+            try { foreach (var p in procs) pids.Add((uint)p.Id); }
             finally { foreach (var p in procs) p.Dispose(); }
         }
         catch { }
-        return IntPtr.Zero;
+        if (pids.Count == 0) return IntPtr.Zero;
+
+        // Process.MainWindowHandle 은 Chromium/Electron/WebView2 계열(예: ChatGPT 데스크톱)에서
+        // 보이는 창을 소유한 프로세스가 핸들을 노출하지 않아 0 을 돌려주는 경우가 있다. 그래서
+        // AHK 의 ahk_exe 매칭처럼 시스템의 모든 최상위 창을 직접 열거해, 위 프로세스가 소유한
+        // "보이는 · 소유자 없는 · 제목 있는" 창을 Z-order 상단부터 찾는다(가장 앞의 실제 창).
+        IntPtr found = IntPtr.Zero;
+        IntPtr fallback = IntPtr.Zero;   // 제목 없는 후보(제목 있는 창이 하나도 없을 때만 사용)
+        try
+        {
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (!NativeMethods.IsWindowVisible(hwnd)) return true;                              // 숨김/트레이 창 제외
+                if (NativeMethods.GetWindow(hwnd, NativeMethods.GW_OWNER) != IntPtr.Zero) return true; // 소유된 보조 창 제외
+                NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+                if (!pids.Contains(pid)) return true;
+                if (NativeMethods.GetWindowTextLength(hwnd) > 0) { found = hwnd; return false; }    // 제목 있는 창 → 즉시 채택
+                if (fallback == IntPtr.Zero) fallback = hwnd;                                       // 제목 없으면 후보로만 보관
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { }
+
+        return found != IntPtr.Zero ? found : fallback;
     }
 
     private static void Run(AppEntry app)

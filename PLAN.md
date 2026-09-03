@@ -80,3 +80,4 @@ FocusClip — 런처(FocusManager) + 클립보드(Clipboard-Manager)를 통합�
 | 2026-08-24 | 고정(📌) 항목을 기본 팝업에서 분리 — 클립·경로 각각 오른쪽에 압축 카드 「고정 팝업」 신설(큰 고정 카드가 최근 목록을 밀어내던 불편 해소) |
 | 2026-08-24 | 경로 카드 클릭 = 열기로 변경(기본·고정 팝업 공통), 붙여넣기는 📋 버튼으로 분리 |
 | 2026-08-25 | 고정 팝업 배치를 「기본 팝업 자리」 기준으로 — 세로는 항상 고정(클립=도크 위·경로=도크 아래), 가로는 도크 왼쪽 정렬 → 기본 팝업이 생기면 오른쪽으로 밀림 |
+| 2026-09-03 | WindowManager.FindMainWindow: Process.MainWindowHandle 대신 EnumWindows 로 실행 파일명 매칭(ahk_exe 방식) — Chromium/Electron/WebView2 계열(ChatGPT 데스크톱 등)에서 보이는 창을 소유한 프로세스가 MainWindowHandle=0 이라 전환이 안 되던 문제 해결. 보이는·소유자 없는·제목 있는 최상위 창을 Z-order 상단부터 매칭 |

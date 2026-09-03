@@ -129,6 +129,28 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+    // ── 최상위 창 열거 (AHK 의 ahk_exe 매칭 대응 — 실행 파일명으로 창 찾기) ──
+    // Chromium/Electron/WebView2 계열(예: ChatGPT 데스크톱)은 보이는 창을 소유한 프로세스가
+    // Process.MainWindowHandle 을 노출하지 않는 경우가 있어, 그 앱들은 프로세스 단위 조회로는
+    // 창을 못 찾는다. 대신 시스템의 모든 최상위 창을 열거해 프로세스 ID 로 직접 매칭한다.
+    public const uint GW_OWNER = 4;
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int GetWindowTextLength(IntPtr hWnd);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
