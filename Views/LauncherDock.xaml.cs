@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Controls;
+using System.Windows.Media.Animation;
 using FocusClip.Interop;
 using FocusClip.Models;
 
@@ -35,6 +37,12 @@ public partial class LauncherDock : Window
     private Point _dragStart;
     private AppEntry? _dragItem;
     private bool _justDragged;
+    private bool _dragging;
+    private bool _dragCancelled;
+    private int _dropIndex;
+    private Window? _dragGhost;
+    private readonly List<FrameworkElement> _dragContainers = new();
+    private readonly List<double> _dragSlots = new();
     private int _pinnedCount = 4; // 고정구간 경계(구분선 위치)
     private FrameworkElement? _paddedContainer; // 구분선 여백을 적용한 경계 컨테이너(이동 시 리셋용)
 
@@ -128,25 +136,34 @@ public partial class LauncherDock : Window
 
     private void AppButton_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (_apps == null || _dragItem == null || e.LeftButton != MouseButtonState.Pressed) return;
+        if (_dragging || _apps == null || _dragItem == null || e.LeftButton != MouseButtonState.Pressed) return;
         var pos = e.GetPosition(null);
         if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(pos.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
 
         var dragged = _dragItem;
         _justDragged = true;
-        var effect = DragDrop.DoDragDrop((DependencyObject)sender, dragged, DragDropEffects.Move);
-        _dragItem = null;
+        var effect = DragDropEffects.None;
+        try
+        {
+            BeginDragPreview(dragged);
+            // Keep the drag source stable while its neighbours move visually.
+            effect = DragDrop.DoDragDrop(this, dragged, DragDropEffects.Move);
+        }
+        finally
+        {
+            EndDragPreview();
+            _dragItem = null;
+        }
 
         // 드롭 대상이 없었고(None) 커서가 도크 밖이면 제거.
-        if (effect == DragDropEffects.None && IsCursorOutsideWindow())
+        if (!_dragCancelled && effect == DragDropEffects.None && IsCursorOutsideWindow())
             AppRemoveRequested?.Invoke(dragged);
     }
 
     private void AppButton_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(typeof(AppEntry)) ? DragDropEffects.Move : DragDropEffects.None;
-        e.Handled = true;
+        Surface_DragOver(sender, e);
     }
 
     private void AppButton_Drop(object sender, DragEventArgs e)
@@ -154,10 +171,11 @@ public partial class LauncherDock : Window
         e.Handled = true;
         e.Effects = DragDropEffects.Move;
         if (_apps == null || e.Data.GetData(typeof(AppEntry)) is not AppEntry dragged) return;
-        if (sender is FrameworkElement fe && fe.Tag is AppEntry target && !ReferenceEquals(dragged, target))
+        if (_dragging && ReferenceEquals(dragged, _dragItem))
         {
-            int from = _apps.IndexOf(dragged), to = _apps.IndexOf(target);
-            if (from >= 0 && to >= 0)
+            PreviewPosition(e.GetPosition(AppList).X);
+            int from = _apps.IndexOf(dragged), to = _dropIndex;
+            if (from >= 0 && to >= 0 && from != to)
             {
                 // 이동 전 인덱스로 고정구간(구분선 왼쪽) 횡단 여부 판정.
                 int p = _pinnedCount;
@@ -207,14 +225,127 @@ public partial class LauncherDock : Window
     // 도크 배경에 드롭 = 순서 유지(제거 방지). Move 로 처리해 None 이 되지 않게 한다.
     private void Surface_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(typeof(AppEntry)) ? DragDropEffects.Move : DragDropEffects.None;
+        bool ownDrag = _dragging && ReferenceEquals(e.Data.GetData(typeof(AppEntry)), _dragItem);
+        e.Effects = ownDrag ? DragDropEffects.Move : DragDropEffects.None;
+        if (ownDrag) PreviewPosition(e.GetPosition(AppList).X);
         e.Handled = true;
     }
 
     private void Surface_Drop(object sender, DragEventArgs e)
     {
+        AppButton_Drop(sender, e);
+    }
+
+    private void BeginDragPreview(AppEntry item)
+    {
+        _dragging = true;
+        _dragCancelled = false;
+        _dropIndex = _apps!.IndexOf(item);
+        AppList.UpdateLayout();
+        for (int i = 0; i < _apps.Count; i++)
+        {
+            var container = (FrameworkElement)AppList.ItemContainerGenerator.ContainerFromIndex(i);
+            _dragContainers.Add(container);
+            _dragSlots.Add(container.TranslatePoint(new Point(), AppList).X);
+            container.RenderTransform = new TranslateTransform();
+            if (i == _dropIndex) container.Opacity = 0.18;
+        }
+        _dragGhost = new Window
+        {
+            Width = 40, Height = 40, WindowStyle = WindowStyle.None,
+            AllowsTransparency = true, Background = Brushes.Transparent,
+            ShowInTaskbar = false, ShowActivated = false, Topmost = true,
+            ResizeMode = ResizeMode.NoResize, IsHitTestVisible = false,
+            Content = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(220, 35, 35, 42)),
+                CornerRadius = new CornerRadius(8), Padding = new Thickness(5),
+                BorderBrush = (Brush)FindResource("NeonBrush"), BorderThickness = new Thickness(1),
+                Child = new Image { Source = item.Icon, Width = 28, Height = 28 }
+            }
+        };
+        _dragGhost.SourceInitialized += (_, _) =>
+        {
+            var hwnd = new WindowInteropHelper(_dragGhost).Handle;
+            NativeMethods.MakeNoActivateToolWindow(hwnd);
+            NativeMethods.SetClickThrough(hwnd, true);
+            MoveDragGhost();
+        };
+        GiveFeedback += DragFeedback;
+        QueryContinueDrag += ContinueIconDrag;
+        _dragGhost.Show();
+        MoveDragGhost();
+    }
+
+    private void DragFeedback(object sender, GiveFeedbackEventArgs e)
+    {
+        MoveDragGhost();
+        e.UseDefaultCursors = false;
+        Mouse.SetCursor(Cursors.Arrow);
         e.Handled = true;
-        e.Effects = DragDropEffects.Move;
+    }
+
+    private void ContinueIconDrag(object sender, QueryContinueDragEventArgs e)
+    {
+        if (e.EscapePressed || !IsVisible)
+        {
+            _dragCancelled = true;
+            e.Action = DragAction.Cancel;
+            e.Handled = true;
+        }
+    }
+
+    private void MoveDragGhost()
+    {
+        if (_dragGhost == null || !NativeMethods.GetCursorPos(out var p)) return;
+        NativeMethods.SetWindowPos(new WindowInteropHelper(_dragGhost).Handle, IntPtr.Zero,
+            p.X + 12, p.Y + 12, 0, 0, NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | 0x0004);
+    }
+
+    private void PreviewPosition(double x)
+    {
+        if (_apps == null || _dragItem == null || _dragSlots.Count != _apps.Count) return;
+        int from = _apps.IndexOf(_dragItem);
+        if (from < 0) return;
+        // Use fixed slots, not animated hit targets, so stationary pointers cannot cause oscillation.
+        int to = 0;
+        double nearest = double.MaxValue;
+        for (int i = 0; i < _dragSlots.Count; i++)
+        {
+            double distance = Math.Abs(x - (_dragSlots[i] + _dragContainers[i].ActualWidth / 2));
+            if (distance < nearest) { nearest = distance; to = i; }
+        }
+        if (_dropIndex == to) return;
+        _dropIndex = to;
+        for (int i = 0; i < _dragContainers.Count; i++)
+        {
+            int slot = i == from ? to
+                : from < to && i > from && i <= to ? i - 1
+                : to < from && i >= to && i < from ? i + 1 : i;
+            var transform = (TranslateTransform)_dragContainers[i].RenderTransform;
+            transform.BeginAnimation(TranslateTransform.XProperty,
+                new DoubleAnimation(_dragSlots[slot] - _dragSlots[i], TimeSpan.FromMilliseconds(120))
+                { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+        }
+    }
+
+    private void EndDragPreview()
+    {
+        GiveFeedback -= DragFeedback;
+        QueryContinueDrag -= ContinueIconDrag;
+        _dragGhost?.Close();
+        _dragGhost = null;
+        foreach (var container in _dragContainers)
+        {
+            container.RenderTransform = Transform.Identity;
+            container.Opacity = 1;
+        }
+        _dragContainers.Clear();
+        _dragSlots.Clear();
+        _dragging = false;
+        Mouse.SetCursor(null);
+        AppList.UpdateLayout();
+        UpdateSeparator();
     }
 
     private bool IsCursorOutsideWindow()
@@ -254,3 +385,4 @@ public partial class LauncherDock : Window
         UpdateSeparator(); // 표시 시점에 1회 구분선 위치 확정
     }
 }
+
