@@ -8,6 +8,9 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using FocusClip.Models;
 using FocusClip.Services;
 
@@ -44,6 +47,16 @@ public partial class SettingsWindow : Window
     private const string ReorderFormat = "FocusClip.ReorderApps";
     private Point _regDragStart;
     private bool _regDragging;
+    private List<AppEntry>? _movingApps;
+    private List<AppEntry>? _previewBase;
+    private ObservableCollection<AppEntry>? _previewApps;
+    private int _previewIndex = -1;
+    private bool _previewReorder;
+    private DispatcherTimer? _dragScrollTimer;
+    private Point _dragPoint;
+    private bool _overRegistered;
+    private bool _runningDragArmed;
+    private bool _registeredDragArmed;
 
     public SettingsWindow(ConfigService cfg, IconService icons,
         ObservableCollection<AppEntry> registered, Action onChanged,
@@ -302,63 +315,52 @@ public partial class SettingsWindow : Window
     {
         _dragStart = e.GetPosition(null);
         _dragging = false;
+        _runningDragArmed = ItemsControl.ContainerFromElement(RunningList, e.OriginalSource as DependencyObject) is ListBoxItem;
     }
 
     private void RunningList_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _dragging) return;
+        if (e.LeftButton != MouseButtonState.Pressed || _dragging || !_runningDragArmed) return;
         var pos = e.GetPosition(null);
         if (Math.Abs(pos.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(pos.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
 
-        var items = RunningList.SelectedItems.Cast<AppEntry>().ToList();
+        var items = _running.Where(a => RunningList.SelectedItems.Contains(a)).ToList();
         if (items.Count == 0) return;
         _dragging = true;
-        DragDrop.DoDragDrop(RunningList, items, DragDropEffects.Move);
-        _dragging = false;
+        try { RunAppDrag(items, false); }
+        finally { _dragging = false; _runningDragArmed = false; }
     }
 
     private void RegisteredList_DragOver(object sender, DragEventArgs e)
     {
-        if (e.Data.GetDataPresent(ReorderFormat))
+        bool valid = IsOwnAppDrag(e);
+        e.Effects = valid ? DragDropEffects.Move : DragDropEffects.None;
+        if (valid)
         {
-            e.Effects = DragDropEffects.Move;
-            ShowInsertMark(DropIndexAt(e.GetPosition(RegisteredList)));
-        }
-        else
-        {
-            e.Effects = e.Data.GetDataPresent(typeof(List<AppEntry>))
-                ? DragDropEffects.Move : DragDropEffects.None;
+            _overRegistered = true;
+            _dragPoint = e.GetPosition(RegisteredList);
+            PreviewInsertion(PreviewIndexAt(_dragPoint));
         }
         e.Handled = true;
     }
 
-    private void RegisteredList_DragLeave(object sender, DragEventArgs e) => ShowInsertMark(-1);
+    private void RegisteredList_DragLeave(object sender, DragEventArgs e)
+    {
+        var point = e.GetPosition(RegisteredList);
+        if (new Rect(RegisteredList.RenderSize).Contains(point)) return;
+        _overRegistered = false;
+        RestoreRegisteredView();
+    }
 
     private void RegisteredList_Drop(object sender, DragEventArgs e)
     {
-        ShowInsertMark(-1);
-
-        // 등록 목록 안에서 끌었다 → 순서 변경
-        if (e.Data.GetDataPresent(ReorderFormat))
-        {
-            if (e.Data.GetData(ReorderFormat) is List<AppEntry> moving && moving.Count > 0)
-            {
-                ReorderTo(moving, DropIndexAt(e.GetPosition(RegisteredList)));
-                Touch(); // 실행 중 목록은 바뀌지 않으므로 RefreshRunning 은 하지 않는다
-            }
-            return;
-        }
-
-        // 실행 중 목록에서 끌어왔다 → 추가
-        if (!e.Data.GetDataPresent(typeof(List<AppEntry>))) return;
-        foreach (var sel in (List<AppEntry>)e.Data.GetData(typeof(List<AppEntry>)))
-        {
-            sel.Icon = _icons.GetIcon(sel);
-            _registered.Add(sel);
-            _running.Remove(sel);
-        }
-        Persist();
+        e.Handled = true;
+        e.Effects = DragDropEffects.None;
+        if (!IsOwnAppDrag(e)) return;
+        PreviewInsertion(PreviewIndexAt(e.GetPosition(RegisteredList)));
+        CommitAppDrop();
+        e.Effects = DragDropEffects.Move;
     }
 
     // ── 드래그로 순서 바꾸기 (RegisteredList 안에서) ──
@@ -367,70 +369,178 @@ public partial class SettingsWindow : Window
     {
         _regDragStart = e.GetPosition(null);
         _regDragging = false;
+        _registeredDragArmed = ItemsControl.ContainerFromElement(RegisteredList, e.OriginalSource as DependencyObject) is ListBoxItem;
     }
 
     private void RegisteredList_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _regDragging) return;
+        if (e.LeftButton != MouseButtonState.Pressed || _regDragging || !_registeredDragArmed) return;
         var pos = e.GetPosition(null);
         if (Math.Abs(pos.X - _regDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
             Math.Abs(pos.Y - _regDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
 
-        var items = RegisteredList.SelectedItems.Cast<AppEntry>().ToList();
+        var items = _registered.Where(a => RegisteredList.SelectedItems.Contains(a)).ToList();
         if (items.Count == 0) return;
 
         _regDragging = true;
-        var data = new DataObject(ReorderFormat, items);
-        DragDrop.DoDragDrop(RegisteredList, data, DragDropEffects.Move);
-        _regDragging = false;
-        ShowInsertMark(-1);
+        try { RunAppDrag(items, true); }
+        finally { _regDragging = false; _registeredDragArmed = false; }
     }
 
-    /// <summary>커서 Y 위치에 해당하는 삽입 인덱스. 항목의 위쪽 절반이면 그 앞, 아래쪽 절반이면 그 뒤.</summary>
-    private int DropIndexAt(Point pt)
+    private bool IsOwnAppDrag(DragEventArgs e) => _movingApps != null && ReferenceEquals(
+        e.Data.GetData(_previewReorder ? ReorderFormat : typeof(List<AppEntry>).FullName!), _movingApps);
+
+    private void RunAppDrag(List<AppEntry> items, bool reorder)
     {
-        for (int i = 0; i < _registered.Count; i++)
+        _movingApps = items;
+        _previewReorder = reorder;
+        _previewBase = _registered.Where(a => !reorder || !items.Contains(a)).ToList();
+        _dragScrollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+        _dragScrollTimer.Tick += ScrollDragPreview;
+        _dragScrollTimer.Start();
+        try
         {
-            if (RegisteredList.ItemContainerGenerator.ContainerFromIndex(i) is not ListBoxItem lbi) continue;
-            if (lbi.ActualHeight <= 0) continue;
-            double top = lbi.TranslatePoint(new Point(0, 0), RegisteredList).Y;
-            if (pt.Y < top + lbi.ActualHeight / 2) return i;
+            using var visual = new AppDragVisual(this, items);
+            var data = reorder ? new DataObject(ReorderFormat, items) : new DataObject(typeof(List<AppEntry>), items);
+            DragDrop.DoDragDrop(this, data, DragDropEffects.Move);
         }
-        return _registered.Count; // 마지막 항목보다 아래 → 맨 끝
-    }
-
-    /// <summary>삽입 위치를 항목 테두리로 표시한다. index=-1 이면 모두 지운다.</summary>
-    private void ShowInsertMark(int index)
-    {
-        for (int i = 0; i < _registered.Count; i++)
+        finally
         {
-            if (RegisteredList.ItemContainerGenerator.ContainerFromIndex(i) is not ListBoxItem lbi) continue;
-            // 맨 끝에 놓는 경우만 마지막 항목의 '아래' 선으로 표시한다.
-            double top = index == i ? 2 : 0;
-            double bottom = index == _registered.Count && i == _registered.Count - 1 ? 2 : 0;
-            lbi.BorderThickness = new Thickness(0, top, 0, bottom);
+            _dragScrollTimer.Stop();
+            _dragScrollTimer = null;
+            RestoreRegisteredView();
+            _movingApps = null;
+            _previewBase = null;
+            _overRegistered = false;
         }
     }
 
-    /// <summary>선택 항목들을 targetIndex 자리로 옮긴다(서로의 상대 순서는 유지).</summary>
-    private void ReorderTo(List<AppEntry> moving, int targetIndex)
+    private void CommitAppDrop()
     {
-        // 현재 순서대로 정렬해 두어야 여러 개를 옮겨도 자기들끼리의 순서가 보존된다.
-        var ordered = moving.Where(_registered.Contains)
-                            .OrderBy(_registered.IndexOf)
-                            .ToList();
-        if (ordered.Count == 0) return;
-
-        // 옮길 항목 중 목표 위치보다 앞에 있던 것들은 제거되면서 인덱스를 당기므로 그만큼 보정한다.
-        int insert = targetIndex - ordered.Count(a => _registered.IndexOf(a) < targetIndex);
-
-        foreach (var a in ordered) _registered.Remove(a);
-
-        insert = Math.Max(0, Math.Min(_registered.Count, insert));
-        foreach (var a in ordered) _registered.Insert(insert++, a);
-
+        if (_movingApps == null || _previewBase == null || _previewIndex < 0) return;
+        var moving = _movingApps.ToList();
+        int insert = _previewIndex;
+        RestoreRegisteredView();
+        if (_previewReorder)
+            foreach (var item in moving) _registered.Remove(item);
+        insert = Math.Clamp(insert, 0, _registered.Count);
+        foreach (var item in moving)
+        {
+            if (!_previewReorder) { item.Icon = _icons.GetIcon(item); _running.Remove(item); }
+            _registered.Insert(insert++, item);
+        }
         RegisteredList.SelectedItems.Clear();
-        foreach (var a in ordered) RegisteredList.SelectedItems.Add(a);
+        foreach (var item in moving) RegisteredList.SelectedItems.Add(item);
+        if (_previewReorder) Touch(); else Persist();
+    }
+
+    // Hit test layout coordinates, excluding animation offsets and keeping the gap stable.
+    private int PreviewIndexAt(Point point)
+    {
+        if (_previewBase == null) return 0;
+        if (_previewApps != null && _movingApps != null)
+            foreach (var item in _movingApps)
+                if (RegisteredList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem gap)
+                {
+                    double top = LayoutTop(gap);
+                    if (point.Y >= top && point.Y <= top + gap.ActualHeight) return _previewIndex;
+                }
+        for (int i = 0; i < _previewBase.Count; i++)
+            if (RegisteredList.ItemContainerGenerator.ContainerFromItem(_previewBase[i]) is ListBoxItem row
+                && point.Y < LayoutTop(row) + row.ActualHeight / 2) return i;
+        return _previewBase.Count;
+    }
+
+    private double LayoutTop(FrameworkElement row) => row.TranslatePoint(new Point(), RegisteredList).Y
+        - (row.RenderTransform is TranslateTransform transform ? transform.Y : 0);
+
+    private void PreviewInsertion(int index)
+    {
+        if (_previewBase == null || _movingApps == null || _previewIndex == index && _previewApps != null) return;
+        var oldPositions = new Dictionary<AppEntry, double>();
+        foreach (var item in _previewBase)
+            if (RegisteredList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem row)
+                oldPositions[item] = row.TranslatePoint(new Point(), RegisteredList).Y;
+        foreach (var item in RegisteredList.Items.Cast<AppEntry>())
+            if (RegisteredList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem row)
+            {
+                row.Opacity = 1;
+                row.ClearValue(Control.BackgroundProperty);
+                row.RenderTransform = Transform.Identity;
+            }
+        var order = _previewBase.ToList();
+        index = Math.Clamp(index, 0, order.Count);
+        order.InsertRange(index, _movingApps);
+        var scroll = FindScrollViewer(RegisteredList);
+        double offset = scroll?.VerticalOffset ?? 0;
+        _previewIndex = index;
+        _previewApps = new ObservableCollection<AppEntry>(order);
+        RegisteredList.ItemsSource = _previewApps;
+        RegisteredList.UpdateLayout();
+        scroll?.ScrollToVerticalOffset(offset);
+        RegisteredList.UpdateLayout();
+        foreach (var item in order)
+        {
+            if (RegisteredList.ItemContainerGenerator.ContainerFromItem(item) is not ListBoxItem row) continue;
+            if (_movingApps.Contains(item))
+            {
+                row.Opacity = 0.35;
+                row.Background = (Brush)FindResource("AccentBrush");
+            }
+            else if (oldPositions.TryGetValue(item, out double oldTop))
+            {
+                var transform = new TranslateTransform();
+                double delta = oldTop - LayoutTop(row);
+                row.RenderTransform = transform;
+                transform.BeginAnimation(TranslateTransform.YProperty,
+                    new DoubleAnimation(delta, 0, TimeSpan.FromMilliseconds(120))
+                    { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+            }
+        }
+    }
+
+    private void RestoreRegisteredView()
+    {
+        if (_previewApps != null)
+        {
+            var scroll = FindScrollViewer(RegisteredList);
+            double offset = scroll?.VerticalOffset ?? 0;
+            foreach (var item in _previewApps)
+                if (RegisteredList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem row)
+                {
+                    row.Opacity = 1;
+                    row.ClearValue(Control.BackgroundProperty);
+                    row.RenderTransform = Transform.Identity;
+                }
+            RegisteredList.ItemsSource = _registered;
+            RegisteredList.UpdateLayout();
+            scroll?.ScrollToVerticalOffset(offset);
+            if (_previewReorder && _movingApps != null)
+                foreach (var item in _movingApps)
+                    if (_registered.Contains(item)) RegisteredList.SelectedItems.Add(item);
+        }
+        _previewApps = null;
+        _previewIndex = -1;
+    }
+
+    private void ScrollDragPreview(object? sender, EventArgs e)
+    {
+        if (!_overRegistered || _previewApps == null) return;
+        var scroll = FindScrollViewer(RegisteredList);
+        if (scroll == null) return;
+        if (_dragPoint.Y < 24) scroll.ScrollToVerticalOffset(scroll.VerticalOffset - 16);
+        else if (_dragPoint.Y > RegisteredList.ActualHeight - 24) scroll.ScrollToVerticalOffset(scroll.VerticalOffset + 16);
+        else return;
+        RegisteredList.UpdateLayout();
+        PreviewInsertion(PreviewIndexAt(_dragPoint));
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject parent)
+    {
+        if (parent is ScrollViewer viewer) return viewer;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FindScrollViewer(VisualTreeHelper.GetChild(parent, i)) is { } found) return found;
+        return null;
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshRunning();
