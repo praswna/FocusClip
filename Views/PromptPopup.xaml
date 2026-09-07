@@ -145,10 +145,31 @@
                 </ToggleButton>
             </Grid>
 
-            <ScrollViewer Grid.Row="2" x:Name="Scroller" VerticalScrollBarVisibility="Auto" MaxHeight="320"
-                          PreviewMouseWheel="Scroller_PreviewMouseWheel">
-                <ItemsControl x:Name="PromptList">
-                    <ItemsControl.ItemTemplate>
+            <ListBox Grid.Row="2" x:Name="PromptList" MaxHeight="320"
+                     Background="Transparent" BorderThickness="0" Padding="0"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.CanContentScroll="True"
+                     VirtualizingPanel.IsVirtualizing="True"
+                     VirtualizingPanel.VirtualizationMode="Recycling"
+                     PreviewMouseWheel="Scroller_PreviewMouseWheel">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Focusable" Value="False"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
                                     Background="{StaticResource Bg2Brush}"
@@ -175,9 +196,8 @@
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                    </ListBox.ItemTemplate>
+            </ListBox>
         </Grid>
     </Border>
 </Window>

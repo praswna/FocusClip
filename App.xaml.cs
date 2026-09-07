@@ -8,7 +8,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using FocusClip.Interop;
 using FocusClip.Models;
@@ -42,6 +41,7 @@ public partial class App : Application
     private Toast? _toast;
     private DispatcherTimer? _refreshTimer;
     private DispatcherTimer? _outsidePoll;   // 오토클로즈: 외부 클릭 감지
+    private int _activeRefreshRunning;
     private DateTime _overlayShownAt;
     private IntPtr _prevForeground;
     private bool _editDialogOpen; // 모달 편집기 중복 오픈 방지(더블클릭 → BeginInvoke 큐잉으로 중첩 모달이 열리는 것 차단)
@@ -543,7 +543,7 @@ public partial class App : Application
             _clipboard.MarkInternalCopy();
             if (item.IsImage)
             {
-                var img = item.FullImage ?? LoadImage(item.FilePath); // C7: 저장 전이면 메모리 원본 사용
+                var img = ClipboardService.LoadImage(item);
                 if (img != null) Clipboard.SetImage(img);
             }
             else
@@ -672,7 +672,7 @@ public partial class App : Application
         {
             if (item.IsImage)
             {
-                var src = item.FullImage ?? LoadImage(item.FilePath);
+                var src = ClipboardService.LoadImage(item);
                 if (src == null) return;
                 var dlg = new ImageAnnotateWindow(src) { Topmost = true };
                 dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
@@ -702,22 +702,6 @@ public partial class App : Application
             else
                 OutsidePollMaybeStart();
         }
-    }
-
-    private static BitmapSource? LoadImage(string? path)
-    {
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var b = new BitmapImage();
-            b.BeginInit();
-            b.CacheOption = BitmapCacheOption.OnLoad;
-            b.UriSource = new Uri(path);
-            b.EndInit();
-            b.Freeze();
-            return b;
-        }
-        catch { return null; }
     }
 
     /// <summary>클립 카드의 저장된 본문 파일 위치를 탐색기로 연다. 파일이 있으면 그 파일을 선택, 없으면 저장 폴더만.</summary>
@@ -805,14 +789,15 @@ public partial class App : Application
 
     private void RefreshActiveStates()
     {
+        if (System.Threading.Interlocked.Exchange(ref _activeRefreshRunning, 1) != 0) return;
         // 시스템 전체 프로세스 열거(GetProcesses)는 1.5초마다 반복되는 무거운 작업이라 백그라운드에서 수행하고,
         // IsActive(바인딩 속성) 갱신만 UI 스레드로 마샬한다 — UI 스레드의 주기적 멈춤을 없앤다.
         // GetProcesses()가 돌려준 Process 객체(파이널라이저 대상)는 finally에서 즉시 Dispose.
         Task.Run(() =>
         {
-            HashSet<string> running;
             try
             {
+                HashSet<string> running;
                 var procs = Process.GetProcesses();
                 try
                 {
@@ -821,18 +806,18 @@ public partial class App : Application
                         StringComparer.OrdinalIgnoreCase);
                 }
                 finally { foreach (var p in procs) p.Dispose(); }
-            }
-            catch { return; }
-
-            Dispatcher.BeginInvoke(() =>
-            {
-                foreach (var app in _apps)
+                Dispatcher.BeginInvoke(() =>
                 {
-                    string n = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                        ? app.ProcessName[..^4] : app.ProcessName;
-                    app.IsActive = !string.IsNullOrEmpty(n) && running.Contains(n);
-                }
-            });
+                    foreach (var app in _apps)
+                    {
+                        string n = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                            ? app.ProcessName[..^4] : app.ProcessName;
+                        app.IsActive = !string.IsNullOrEmpty(n) && running.Contains(n);
+                    }
+                });
+            }
+            catch { }
+            finally { System.Threading.Interlocked.Exchange(ref _activeRefreshRunning, 0); }
         });
     }
 

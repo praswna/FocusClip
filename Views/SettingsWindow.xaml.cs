@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -58,6 +59,7 @@ public partial class SettingsWindow : Window
     private bool _overRegistered;
     private bool _runningDragArmed;
     private bool _registeredDragArmed;
+    private int _runningRefreshGeneration;
 
     public SettingsWindow(ConfigService cfg, IconService icons,
         ObservableCollection<AppEntry> registered, Action onChanged,
@@ -122,7 +124,7 @@ public partial class SettingsWindow : Window
 
         PreviewKeyDown += SettingsWindow_PreviewKeyDown;
 
-        RefreshRunning();
+        Loaded += async (_, _) => await RefreshRunningAsync();
     }
 
     // ── C3: 단축키 변경 ──
@@ -256,15 +258,19 @@ public partial class SettingsWindow : Window
         Touch();
     }
 
-    private void RefreshRunning()
+    private async Task RefreshRunningAsync()
     {
-        _running.Clear();
+        int generation = ++_runningRefreshGeneration;
         var reg = new HashSet<string>(_registered.Select(a => a.ProcessName), StringComparer.OrdinalIgnoreCase);
-        foreach (var rp in ScanRunning(reg))
+        var entries = await Task.Run(() =>
         {
-            rp.Icon = _icons.IconForPath(rp.ExePath, 20);
-            _running.Add(rp);
-        }
+            var result = ScanRunning(reg);
+            foreach (var rp in result) rp.Icon = _icons.IconForPath(rp.ExePath, 20);
+            return result;
+        });
+        if (generation != _runningRefreshGeneration || !IsLoaded) return;
+        _running.Clear();
+        foreach (var rp in entries) _running.Add(rp);
     }
 
     private static List<AppEntry> ScanRunning(HashSet<string> exclude)
@@ -272,21 +278,26 @@ public partial class SettingsWindow : Window
         var list = new List<AppEntry>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-        foreach (var p in Process.GetProcesses())
+        var processes = Process.GetProcesses();
+        try
         {
-            try
+            foreach (var p in processes)
             {
-                if (p.MainWindowHandle == IntPtr.Zero || string.IsNullOrEmpty(p.MainWindowTitle)) continue;
-                string proc = p.ProcessName + ".exe";
-                if (exclude.Contains(proc) || seen.Contains(proc)) continue;
-                string? path = p.MainModule?.FileName;
-                if (string.IsNullOrEmpty(path)) continue;
-                if (path.StartsWith(winDir, StringComparison.OrdinalIgnoreCase)) continue;
-                seen.Add(proc);
-                list.Add(new AppEntry { Name = p.ProcessName, ProcessName = proc, ExePath = path });
+                try
+                {
+                    if (p.MainWindowHandle == IntPtr.Zero || string.IsNullOrEmpty(p.MainWindowTitle)) continue;
+                    string proc = p.ProcessName + ".exe";
+                    if (exclude.Contains(proc) || seen.Contains(proc)) continue;
+                    string? path = p.MainModule?.FileName;
+                    if (string.IsNullOrEmpty(path)) continue;
+                    if (path.StartsWith(winDir, StringComparison.OrdinalIgnoreCase)) continue;
+                    seen.Add(proc);
+                    list.Add(new AppEntry { Name = p.ProcessName, ProcessName = proc, ExePath = path });
+                }
+                catch { /* 권한/비트수 차이 → 건너뜀 */ }
             }
-            catch { /* 권한/비트수 차이 → 건너뜀 */ }
         }
+        finally { foreach (var p in processes) p.Dispose(); }
         return list.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
@@ -312,7 +323,7 @@ public partial class SettingsWindow : Window
     private void Persist()
     {
         Touch();
-        RefreshRunning();
+        _ = RefreshRunningAsync();
     }
 
     // ── 드래그로 앱 추가 (RunningList → RegisteredList) ──
@@ -559,7 +570,7 @@ public partial class SettingsWindow : Window
         return null;
     }
 
-    private void Refresh_Click(object sender, RoutedEventArgs e) => RefreshRunning();
+    private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshRunningAsync();
 
     // ── 저장 / 취소 ──
 

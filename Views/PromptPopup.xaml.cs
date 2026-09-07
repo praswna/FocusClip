@@ -126,8 +126,17 @@ public partial class PromptPopup : Window
     // ── 스크롤: 휠로 직접 스크롤(무활성 창에서도 확실히 동작) ──
     private void Scroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        Scroller.ScrollToVerticalOffset(Scroller.VerticalOffset - e.Delta);
+        var scroller = FindScrollViewer(PromptList);
+        scroller?.ScrollToVerticalOffset((scroller?.VerticalOffset ?? 0) - e.Delta);
         e.Handled = true;
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject parent)
+    {
+        if (parent is ScrollViewer viewer) return viewer;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FindScrollViewer(VisualTreeHelper.GetChild(parent, i)) is { } found) return found;
+        return null;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -144,7 +153,8 @@ public partial class PromptPopup : Window
         if (msg == WM_MOUSEWHEEL)
         {
             int delta = (short)((wParam.ToInt64() >> 16) & 0xFFFF);
-            Scroller.ScrollToVerticalOffset(Scroller.VerticalOffset - delta);
+            var scroller = FindScrollViewer(PromptList);
+            scroller?.ScrollToVerticalOffset((scroller?.VerticalOffset ?? 0) - delta);
             handled = true;
         }
         return IntPtr.Zero;

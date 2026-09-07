@@ -37,9 +37,15 @@ public class ClipItem : INotifyPropertyChanged
         set { _thumb = value; OnPropertyChanged(); }
     }
 
-    /// <summary>원본 이미지(메모리). 파일 저장 전까지만 보관해 붙여넣기에 쓰고, 저장 완료 후에는 해제(null)되어
-    /// 붙여넣기·편집은 FilePath에서 온디맨드 로드한다. 히스토리에서 복원된 이미지는 처음부터 null.</summary>
+    /// <summary>이미지 편집 결과가 압축 큐에서 처리되기 전까지만 잠시 보관하는 원본.</summary>
     public BitmapSource? FullImage { get; set; }
+
+    /// <summary>미고정 이미지의 PNG 압축 데이터. 원본 BitmapSource를 계속 붙잡지 않으면서도
+    /// 디스크에 저장하지 않고 붙여넣기·편집·드래그할 수 있게 한다.</summary>
+    public byte[]? ImageBytes { get; set; }
+
+    /// <summary>원본이 단일 이미지 큐에서 압축되는 중인지 여부.</summary>
+    public bool ImageProcessing { get; set; }
 
     private bool _pinned;
     public bool Pinned                                   // 카드 핀(이력 보호 + 상단 고정)

@@ -102,8 +102,8 @@ public partial class ClipboardPopup : Window
                 data = new DataObject();
                 if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
                     data.SetFileDropList(new StringCollection { item.FilePath });
-                else if (item.FullImage != null)
-                    data.SetImage(item.FullImage);
+                else if (ClipboardService.LoadImage(item) is { } image)
+                    data.SetImage(image);
             }
             else
             {

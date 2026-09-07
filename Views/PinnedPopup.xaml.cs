@@ -11,6 +11,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using FocusClip.Interop;
 using FocusClip.Models;
+using FocusClip.Services;
 
 namespace FocusClip.Views;
 
@@ -117,8 +118,8 @@ public partial class PinnedPopup : Window
                 data = new DataObject();
                 if (!string.IsNullOrEmpty(item.FilePath) && File.Exists(item.FilePath))
                     data.SetFileDropList(new StringCollection { item.FilePath });
-                else if (item.FullImage != null)
-                    data.SetImage(item.FullImage);
+                else if (ClipboardService.LoadImage(item) is { } image)
+                    data.SetImage(image);
             }
             else
             {
