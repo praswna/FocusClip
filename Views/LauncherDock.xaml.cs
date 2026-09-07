@@ -30,6 +30,8 @@ public partial class LauncherDock : Window
     public event Action? ExitRequested;
     /// <summary>[A/a] 버튼 클릭 → 대소문자(CapsLock) 전환 요청(App이 합성 키로 실제 토글 수행).</summary>
     public event Action? CapsToggleRequested;
+    /// <summary>[한/영] 버튼 클릭 → 현재 입력 언어 전환 요청.</summary>
+    public event Action? ImeToggleRequested;
 
     private const double SepGapPx = 8; // 구분선 좌우 여백(경계 컨테이너 좌측 여백)
 
@@ -221,6 +223,8 @@ public partial class LauncherDock : Window
         SetCaps(!_caps); // 즉시 반영(예측) — 실제 토글은 App이 합성 키로 수행
         CapsToggleRequested?.Invoke();
     }
+
+    private void ImeButton_Click(object sender, RoutedEventArgs e) => ImeToggleRequested?.Invoke();
 
     // 도크 배경에 드롭 = 순서 유지(제거 방지). Move 로 처리해 None 이 되지 않게 한다.
     private void Surface_DragOver(object sender, DragEventArgs e)

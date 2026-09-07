@@ -258,7 +258,7 @@
 
                                     <TextBlock Grid.Row="0" Text="{Binding Snippet}" Foreground="#FFDDDDDD"
                                                TextWrapping="Wrap" MaxHeight="110" TextTrimming="CharacterEllipsis"
-                                               Margin="0,0,24,0">
+                                               Margin="0">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Visible"/>
@@ -271,7 +271,8 @@
                                         </TextBlock.Style>
                                     </TextBlock>
 
-                                    <StackPanel Grid.Row="0" Orientation="Vertical"
+                                    <!-- 카드 위에 가로로 겹쳐 표시해 버튼 수가 카드 높이를 키우지 않게 한다. -->
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top">
                                         <Button Style="{StaticResource CardEdit}" Click="Edit_Click"
                                                 Tag="{Binding}" ToolTip="수정"/>

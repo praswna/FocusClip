@@ -205,6 +205,7 @@ internal static class NativeMethods
     // ── 붙여넣기(Ctrl+V) 합성 ──
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const byte VK_CONTROL = 0x11;
+    public const byte VK_HANGUL = 0x15;
     public const byte VK_V = 0x56;
 
     [DllImport("user32.dll")]
@@ -219,6 +220,14 @@ internal static class NativeMethods
         UIntPtr tag = (UIntPtr)(ulong)CAPS_SYNTH_TAG;
         keybd_event((byte)VK_CAPITAL, 0x3A, 0, tag);                 // down (0x3A = CapsLock 스캔코드)
         keybd_event((byte)VK_CAPITAL, 0x3A, KEYEVENTF_KEYUP, tag);   // up
+    }
+
+    /// <summary>한/영 키를 합성해 직전에 활성화된 앱의 입력 언어를 전환한다.</summary>
+    public static void ToggleIme()
+    {
+        UIntPtr tag = (UIntPtr)(ulong)CAPS_SYNTH_TAG;
+        keybd_event(VK_HANGUL, 0, 0, tag);
+        keybd_event(VK_HANGUL, 0, KEYEVENTF_KEYUP, tag);
     }
 
     /// <summary>포그라운드 잠금을 우회하여 대상 창을 확실히 활성화한다(FM의 활성화 로직 대응).</summary>

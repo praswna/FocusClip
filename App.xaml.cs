@@ -138,6 +138,7 @@ public partial class App : Application
         // 드래그가 구분선을 넘으면 고정 개수 갱신(저장은 뒤따르는 AppsReordered→OnAppsChanged가 처리).
         _dock.PinnedCountChanged += n => _configSvc.Config.PinnedCount = n;
         _dock.CapsToggleRequested += () => NativeMethods.ToggleCapsLock(); // [A/a] → 대소문자 전환(후크는 무시)
+        _dock.ImeToggleRequested += () => NativeMethods.ToggleIme();       // [한/영] → 현재 입력 언어 전환
         _dock.AddRequested += () => Dispatcher.BeginInvoke(OpenSettings); // [+] → 설정 열기
         _dock.ExitRequested += () => Dispatcher.BeginInvoke(ExitApp);      // [✕] → 프로그램 종료
         _dock.SetPinnedCount(_configSvc.Config.PinnedCount);

@@ -188,7 +188,7 @@
                                     Tag="{Binding}"
                                     ToolTip="{Binding Text}">
                                 <Grid>
-                                    <StackPanel Margin="0,0,22,0">
+                                    <StackPanel Margin="0">
                                         <StackPanel.Style>
                                             <Style TargetType="StackPanel">
                                                 <Style.Triggers>
@@ -204,7 +204,8 @@
                                         <TextBlock Text="{Binding PathDir}" Foreground="{StaticResource GrayBrush}"
                                                    FontSize="10" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Vertical"
+                                    <!-- 고정 팝업처럼 동작 버튼을 한 줄로 겹쳐 카드 높이를 최소화한다. -->
+                                    <StackPanel Orientation="Horizontal"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top">
                                         <Button Style="{StaticResource CardPin}" Click="Pin_Click"
                                                 Tag="{Binding}" ToolTip="고정(오른쪽 고정 팝업으로 이동)"/>
