@@ -429,6 +429,11 @@ public partial class App : Application
         if (_prompts.Prompts.Count > 0)
             _promptPopup?.ShowRightOf(clipSlot, dock, alignBottom, pathPopup, _clipPinPopup, _pathPinPopup);
         else _promptPopup?.Hide();
+
+        // 각 창의 기본 위치를 정한 뒤 화면 끝에서 생긴 충돌을 순차적으로 해소한다.
+        // 사용자가 직접 핀으로 옮긴 팝업은 고정 장애물로 취급해 위치를 보존한다.
+        PopupPlacement.ResolveOverlaps(dock, Popups().Where(IsPopupPinned),
+            clipPopup, pathPopup, _clipPinPopup, _pathPinPopup, _promptPopup);
     }
 
     /// <summary>클립·경로 팝업이 차지하는 자리. 오른쪽 열(고정·프롬프트 팝업)이 이 자리를 기준으로 놓인다.

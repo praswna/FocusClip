@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using FocusClip.Interop;
 
@@ -58,5 +60,75 @@ internal static class PopupPlacement
                 : stackAvoid.Top - win.ActualHeight - Gap;        // 위로
         }
         win.Top = Math.Max(wa.Top, Math.Min(top, wa.Bottom - win.ActualHeight));
+    }
+
+    /// <summary>
+    /// 개별 팝업 배치가 끝난 뒤 화면 경계에서 겹친 창을 순서대로 빈 자리로 옮긴다.
+    /// 사용자가 핀으로 직접 고정한 창은 fixedWindows로 받아 그 위치를 보존한다.
+    /// </summary>
+    public static void ResolveOverlaps(Window monitorRef, IEnumerable<Window> fixedWindows,
+                                       params Window?[] orderedWindows)
+    {
+        var wa = ScreenUtil.WorkAreaDip(monitorRef);
+        var fixedSet = fixedWindows.Where(w => w.IsVisible).ToHashSet();
+        var occupied = new List<Rect> { RectOf(monitorRef) };
+        occupied.AddRange(fixedSet.Select(RectOf));
+
+        foreach (var win in orderedWindows)
+        {
+            if (win == null || !win.IsVisible || fixedSet.Contains(win)) continue;
+            double width = Math.Min(wa.Width, win.ActualWidth > 0 ? win.ActualWidth : win.Width);
+            double height = Math.Min(wa.Height, win.ActualHeight > 0 ? win.ActualHeight : win.Height);
+            var desired = new Rect(
+                Math.Clamp(win.Left, wa.Left, wa.Right - width),
+                Math.Clamp(win.Top, wa.Top, wa.Bottom - height), width, height);
+            var placed = FindBestPosition(desired, wa, occupied);
+            win.Left = placed.Left;
+            win.Top = placed.Top;
+            occupied.Add(placed);
+        }
+    }
+
+    /// <summary>원래 위치에 가장 가까우면서 기존 사각형들과 Gap만큼 떨어진 위치를 찾는다.</summary>
+    internal static Rect FindBestPosition(Rect desired, Rect workArea, IReadOnlyList<Rect> occupied)
+    {
+        double maxX = Math.Max(workArea.Left, workArea.Right - desired.Width);
+        double maxY = Math.Max(workArea.Top, workArea.Bottom - desired.Height);
+        var xs = new HashSet<double> { Math.Clamp(desired.Left, workArea.Left, maxX), workArea.Left, maxX };
+        var ys = new HashSet<double> { Math.Clamp(desired.Top, workArea.Top, maxY), workArea.Top, maxY };
+        foreach (var r in occupied)
+        {
+            xs.Add(Math.Clamp(r.Left - desired.Width - Gap, workArea.Left, maxX));
+            xs.Add(Math.Clamp(r.Right + Gap, workArea.Left, maxX));
+            ys.Add(Math.Clamp(r.Top - desired.Height - Gap, workArea.Top, maxY));
+            ys.Add(Math.Clamp(r.Bottom + Gap, workArea.Top, maxY));
+        }
+
+        Rect best = new(xs.First(), ys.First(), desired.Width, desired.Height);
+        double bestOverlap = double.MaxValue;
+        double bestDistance = double.MaxValue;
+        foreach (double x in xs)
+        foreach (double y in ys)
+        {
+            var candidate = new Rect(x, y, desired.Width, desired.Height);
+            double overlap = occupied.Sum(r => OverlapAreaWithGap(candidate, r));
+            double distance = Math.Abs(x - desired.Left) + Math.Abs(y - desired.Top);
+            if (overlap < bestOverlap || Math.Abs(overlap - bestOverlap) < 0.01 && distance < bestDistance)
+            {
+                best = candidate;
+                bestOverlap = overlap;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    private static double OverlapAreaWithGap(Rect a, Rect b)
+    {
+        double left = Math.Max(a.Left, b.Left - Gap);
+        double right = Math.Min(a.Right, b.Right + Gap);
+        double top = Math.Max(a.Top, b.Top - Gap);
+        double bottom = Math.Min(a.Bottom, b.Bottom + Gap);
+        return Math.Max(0, right - left) * Math.Max(0, bottom - top);
     }
 }
