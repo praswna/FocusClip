@@ -23,6 +23,7 @@ public partial class PinnedPopup : Window
     public event Action<ClipItem>? UnpinRequested;    // 📌 → 고정 해제(기본 팝업으로 돌아감)
     public event Action<ClipItem>? DeleteRequested;   // ✕ → 목록에서 제거
     public event Action<ClipItem>? OpenRequested;     // 클립 📂 → 저장 위치 열기 / 경로 카드 클릭 → 경로·URL 열기
+    public event Action<ClipItem>? PathPrimaryRequested; // 경로 카드 클릭 → 설정된 열기/복사 동작
     public event Action<ClipItem>? EditRequested;     // ✎ → 텍스트·이미지 편집(클립 전용)
     public event Action<ClipItem>? PromoteRequested;  // 🔖 → 프롬프트 보관함으로(텍스트 클립 전용)
     public event Action? PinChanged;                  // 팝업 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
@@ -151,7 +152,7 @@ public partial class PinnedPopup : Window
     {
         if (_cardDragHappened) { _cardDragHappened = false; return; } // 드래그였으면 복사 안 함
         if (sender is not FrameworkElement fe || fe.Tag is not ClipItem item) return;
-        if (item.IsPath) OpenRequested?.Invoke(item);
+        if (item.IsPath) PathPrimaryRequested?.Invoke(item);
         else ItemSelected?.Invoke(item);
     }
 

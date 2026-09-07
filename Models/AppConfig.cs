@@ -13,6 +13,13 @@ public enum DockRightClickAction
     None,        // 아무 동작 안 함
 }
 
+/// <summary>경로 카드 본문을 클릭했을 때 수행할 동작.</summary>
+public enum PathCardClickAction
+{
+    Open, // 파일·폴더·URL 열기
+    Copy, // 경로 문자열을 클립보드에 복사
+}
+
 /// <summary>앱 전역 설정 + 등록 앱 목록. %APPDATA%\FocusClip\config.json 에 저장.</summary>
 public class AppConfig
 {
@@ -29,6 +36,9 @@ public class AppConfig
     // 아이콘 우클릭 동작(설정창에서 변경). 문자열로 직렬화해 enum 순서 변경에 강하게.
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public DockRightClickAction RightClickAction { get; set; } = DockRightClickAction.AlwaysOnTop;
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public PathCardClickAction PathClickAction { get; set; } = PathCardClickAction.Open;
 
     public List<AppEntry> Apps { get; set; } = new();
 

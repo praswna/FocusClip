@@ -193,7 +193,7 @@ public partial class App : Application
         _pathPopup.SetItems(_clipboard.Paths);
         _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
         _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
-        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
+        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
         _pathPopup.PathPinToggled += item => Dispatcher.BeginInvoke(() => OnPinToggled(item));
         _pathPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_pathPopup));
         _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
@@ -207,6 +207,7 @@ public partial class App : Application
 
         _pathPinPopup = NewPinPopup("고정 경로", _clipboard.Paths);
         _pathPinPopup.OpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
+        _pathPinPopup.PathPrimaryRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
 
         _prompts.Load(); // 프롬프트 보관함 복원(전량 영구 저장)
         _promptPopup = new PromptPopup();
@@ -635,6 +636,24 @@ public partial class App : Application
             else Process.Start(new ProcessStartInfo(item.Text) { UseShellExecute = true }); // 파일/URL은 기본 앱
         }
         catch { _toast?.ShowToast("열 수 없음"); }
+    }
+
+    private void OnPathPrimary(ClipItem item)
+    {
+        if (_configSvc.Config.PathClickAction == PathCardClickAction.Open)
+        {
+            OnPathOpen(item);
+            return;
+        }
+
+        HideOverlay();
+        try
+        {
+            _clipboard.MarkInternalCopy();
+            Clipboard.SetText(item.Text);
+            _toast?.ShowToast("경로 복사됨");
+        }
+        catch { _toast?.ShowToast("복사할 수 없음"); }
     }
 
     /// <summary>폴더를 설정된 파일 관리자(예: Q-Dir)로 연다. 미설정/경로 없음이면 기본 탐색기로 폴백.</summary>

@@ -87,6 +87,15 @@
                              Foreground="White" VerticalAlignment="Center" Checked="RightClick_Changed"/>
             </StackPanel>
 
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="경로 클릭" VerticalAlignment="Center" Width="64"/>
+                <RadioButton x:Name="PathClickOpen" Tag="Open" Content="열기" GroupName="PathClick"
+                             Foreground="White" VerticalAlignment="Center" Margin="0,0,16,0"
+                             Checked="PathClick_Changed"/>
+                <RadioButton x:Name="PathClickCopy" Tag="Copy" Content="복사" GroupName="PathClick"
+                             Foreground="White" VerticalAlignment="Center" Checked="PathClick_Changed"/>
+            </StackPanel>
+
             <DockPanel Margin="0,8,0,0" LastChildFill="True">
                 <TextBlock Text="폴더 열기" VerticalAlignment="Center" Width="64" DockPanel.Dock="Left"/>
                 <Button Content="찾아보기" DockPanel.Dock="Right" Click="BrowseFileManager_Click" Padding="8,2"/>

@@ -13,7 +13,7 @@ using FocusClip.Models;
 
 namespace FocusClip.Views;
 
-/// <summary>복사된 파일 경로 전용 팝업. 함축 표시(이름+축약 경로), 클릭 시 전체 경로 붙여넣기, 드래그 시 텍스트로 드롭.</summary>
+/// <summary>복사된 파일 경로 전용 팝업. 함축 표시(이름+축약 경로), 클릭 동작은 설정에서 열기/복사 선택, 드래그 시 텍스트로 드롭.</summary>
 public partial class PathPopup : Window
 {
     public event Action<ClipItem>? PathSelected;      // 📋 → 클립보드 복사 + 직전 창에 붙여넣기
@@ -135,7 +135,7 @@ public partial class PathPopup : Window
         return false;
     }
 
-    /// <summary>카드 클릭 = 경로/URL 열기(기본 동작). 붙여넣기는 📋 버튼으로 분리했다.</summary>
+    /// <summary>카드 클릭 = 앱에서 설정된 열기/복사 동작. 붙여넣기는 📋 버튼으로 분리했다.</summary>
     private void Card_Click(object sender, MouseButtonEventArgs e)
     {
         if (_cardDragHappened) { _cardDragHappened = false; return; }

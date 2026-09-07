@@ -29,6 +29,7 @@ public partial class SettingsWindow : Window
     private bool _suppressPinned;
     private bool _suppressHideDelay;
     private bool _suppressRc;
+    private bool _suppressPathClick;
     private bool _suppressFm;
     private Point _dragStart;
     private bool _dragging;
@@ -109,6 +110,10 @@ public partial class SettingsWindow : Window
             _ => RcTop,
         }).IsChecked = true;
         _suppressRc = false;
+
+        _suppressPathClick = true;
+        (_cfg.Config.PathClickAction == PathCardClickAction.Copy ? PathClickCopy : PathClickOpen).IsChecked = true;
+        _suppressPathClick = false;
 
         _suppressFm = true;
         FileManagerBox.Text = _cfg.Config.FileManagerPath;
@@ -351,6 +356,17 @@ public partial class SettingsWindow : Window
         if (new Rect(RegisteredList.RenderSize).Contains(point)) return;
         _overRegistered = false;
         RestoreRegisteredView();
+    }
+
+    private void PathClick_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressPathClick) return;
+        if (sender is FrameworkElement fe && fe.Tag is string s
+            && Enum.TryParse<PathCardClickAction>(s, out var action))
+        {
+            _cfg.Config.PathClickAction = action;
+            _dirty = true;
+        }
     }
 
     private void RegisteredList_Drop(object sender, DragEventArgs e)
