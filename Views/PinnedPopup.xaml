@@ -97,7 +97,7 @@
     </Window.Resources>
 
     <Border Background="{StaticResource BgBrush}"
-            BorderBrush="{StaticResource AccentBrush}"
+            BorderBrush="{StaticResource NeonBrush}"
             BorderThickness="1"
             CornerRadius="6"
             Padding="6">
