@@ -158,13 +158,14 @@
                                     Tag="{Binding}"
                                     ToolTip="{Binding Text}">
                                 <Grid>
-                                    <StackPanel Margin="0,0,22,0">
+                                    <StackPanel Margin="0">
                                         <TextBlock Text="{Binding DisplayTitle}" Foreground="#FFDDDDDD"
                                                    FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Preview}" Foreground="{StaticResource GrayBrush}"
                                                    FontSize="10" TextTrimming="CharacterEllipsis"/>
                                     </StackPanel>
-                                    <StackPanel Orientation="Vertical"
+                                    <!-- 내용 위에 가로로 겹쳐 버튼 때문에 카드가 길어지지 않게 한다. -->
+                                    <StackPanel Orientation="Horizontal"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top">
                                         <Button Style="{StaticResource CardEdit}" Click="Edit_Click"
                                                 Tag="{Binding}" ToolTip="편집"/>
