@@ -30,6 +30,10 @@ public class ClipItem : INotifyPropertyChanged
 
     public string? FilePath { get; set; }               // 저장된 이미지 PNG 경로(복사 시 재로드)
 
+    /// <summary>Windows 캡처 등 다른 프로그램이 만든 원본 파일을 참조하는지 여부.
+    /// true인 파일은 핀 해제·편집 때 FocusClip이 삭제하지 않는다.</summary>
+    public bool ExternalFile { get; set; }
+
     private ImageSource? _thumb;
     public ImageSource? Thumb                            // 카드 표시용 썸네일
     {
