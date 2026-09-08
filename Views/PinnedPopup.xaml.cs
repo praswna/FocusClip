@@ -75,13 +75,20 @@ public partial class PinnedPopup : Window
     private void Collapse_Click(object sender, RoutedEventArgs e)
     {
         bool collapse = Scroller.Visibility == Visibility.Visible;
+        SetCollapsed(collapse);
+        CollapseChanged?.Invoke();
+    }
+
+    public void Expand() => SetCollapsed(false);
+
+    private void SetCollapsed(bool collapse)
+    {
         Scroller.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
         ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
         UpdateLayout();
-        CollapseChanged?.Invoke();
     }
 
     /// <summary>현재 보이는(고정된) 항목 수.</summary>
