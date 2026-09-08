@@ -75,7 +75,7 @@ public partial class PathPopup : Window
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
-        UpdateLayout();
+        PopupSizing.Refresh(this);
     }
 
     // ── 로컬/URL 필터 토글 ──

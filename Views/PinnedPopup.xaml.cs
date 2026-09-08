@@ -89,7 +89,7 @@ public partial class PinnedPopup : Window
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
-        UpdateLayout();
+        PopupSizing.Refresh(this);
     }
 
     /// <summary>현재 보이는(고정된) 항목 수.</summary>

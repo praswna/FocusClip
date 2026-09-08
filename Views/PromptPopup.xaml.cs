@@ -52,7 +52,7 @@ public partial class PromptPopup : Window
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
-        UpdateLayout();
+        PopupSizing.Refresh(this);
     }
 
     private void Add_Click(object sender, RoutedEventArgs e)

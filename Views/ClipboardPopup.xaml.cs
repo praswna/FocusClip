@@ -78,7 +78,7 @@ public partial class ClipboardPopup : Window
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
-        UpdateLayout();
+        PopupSizing.Refresh(this);
     }
 
     // ── 텍스트/이미지 필터 토글 ──
