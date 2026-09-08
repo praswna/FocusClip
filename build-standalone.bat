@@ -31,6 +31,7 @@ rem No runtime install required on the target machine.
 rem Output name differs from build.bat (FocusClip.exe) so both versions coexist.
 set "DEPLOY=%LOCALAPPDATA%\FocusClip\app"
 set "FC_TMP=%TEMP%\fc-standalone"
+set "COPY_DEST=C:\Users\prasw\Dropbox\Cluade"
 
 echo === Cleaning build intermediates ===
 if exist "bin" rmdir /s /q "bin"
@@ -63,10 +64,15 @@ if exist "bin" rmdir /s /q "bin"
 if exist "obj" rmdir /s /q "obj"
 if exist "%FC_TMP%" rmdir /s /q "%FC_TMP%"
 
+echo === Copying to %COPY_DEST% ===
+if not exist "%COPY_DEST%" mkdir "%COPY_DEST%"
+copy /y "%DEPLOY%\FocusClip-Standalone.exe" "%COPY_DEST%\FocusClip-Standalone.exe" >nul
+
 echo.
 echo === BUILD OK (self-contained): %DEPLOY%\FocusClip-Standalone.exe ===
+echo === Copied to: %COPY_DEST%\FocusClip-Standalone.exe ===
 rem Does not kill/launch the daily FocusClip.exe; this exe is for distribution.
-explorer "%DEPLOY%"
+explorer "%COPY_DEST%"
 
 echo.
 pause
