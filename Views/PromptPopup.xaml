@@ -150,8 +150,6 @@
                 </ToggleButton>
             </Grid>
 
-            <TextBlock x:Name="ActionHint" Grid.Row="2" Text="카드 클릭: 직전 창에 붙여넣기" Foreground="{StaticResource GrayBrush}"
-                       FontSize="9" Margin="2,0,0,3"/>
 
             <ListBox Grid.Row="3" x:Name="PromptList" MaxHeight="320"
                      Background="Transparent" BorderThickness="0" Padding="0"

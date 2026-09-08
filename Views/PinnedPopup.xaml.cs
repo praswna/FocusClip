@@ -71,7 +71,6 @@ public partial class PinnedPopup : Window
         UpdateCount();
     }
 
-    public void SetPrimaryActionHint(string text) => ActionHint.Text = text;
 
     private void Collapse_Click(object sender, RoutedEventArgs e)
     {
@@ -85,7 +84,6 @@ public partial class PinnedPopup : Window
     private void SetCollapsed(bool collapse)
     {
         Scroller.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
-        ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";

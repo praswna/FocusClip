@@ -74,7 +74,6 @@ public partial class ClipboardPopup : Window
     private void SetCollapsed(bool collapse)
     {
         Scroller.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
-        ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";

@@ -192,7 +192,6 @@ public partial class App : Application
 
         _pathPopup = new PathPopup();
         _pathPopup.SetItems(_clipboard.Paths);
-        _pathPopup.SetPrimaryAction(_configSvc.Config.PathClickAction);
         _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
         _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
         _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
@@ -204,14 +203,11 @@ public partial class App : Application
         // 보관(★) 항목 전용 압축 팝업 — 클립·경로 각각 하나씩, 기본 팝업 오른쪽에 뜬다.
         // 기본 팝업은 미고정 항목만 보여주므로 큼직한 고정 카드가 최근 목록을 밀어내지 않는다.
         _clipPinPopup = NewPinPopup("고정 클립", _clipboard.Items);
-        _clipPinPopup.SetPrimaryActionHint("카드 클릭: 직전 창에 붙여넣기");
         _clipPinPopup.EditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
         _clipPinPopup.PromoteRequested += item => Dispatcher.BeginInvoke(() => OnClipPromote(item));
         _clipPinPopup.OpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
 
         _pathPinPopup = NewPinPopup("고정 경로", _clipboard.Paths);
-        _pathPinPopup.SetPrimaryActionHint(_configSvc.Config.PathClickAction == PathCardClickAction.Copy
-            ? "카드 클릭: 경로 복사" : "카드 클릭: 파일·폴더·URL 열기");
         _pathPinPopup.OpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
         _pathPinPopup.PathPrimaryRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
 
@@ -782,9 +778,6 @@ public partial class App : Application
                 {
                     RebuildSidebar();
                     RefreshActiveStates();
-                    _pathPopup?.SetPrimaryAction(_configSvc.Config.PathClickAction);
-                    _pathPinPopup?.SetPrimaryActionHint(_configSvc.Config.PathClickAction == PathCardClickAction.Copy
-                        ? "카드 클릭: 경로 복사" : "카드 클릭: 파일·폴더·URL 열기");
                 },
                 onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; });
             _settings.Closed += (_, _) => _settings = null;

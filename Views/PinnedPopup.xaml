@@ -159,8 +159,6 @@
                 </ToggleButton>
             </Grid>
 
-            <TextBlock x:Name="ActionHint" Grid.Row="2" Text="카드 클릭: 붙여넣기" Foreground="{StaticResource GrayBrush}"
-                       FontSize="9" Margin="2,0,0,3"/>
 
             <ScrollViewer Grid.Row="3" x:Name="Scroller" VerticalScrollBarVisibility="Auto" MaxHeight="320"
                           PreviewMouseWheel="Scroller_PreviewMouseWheel">

@@ -55,9 +55,6 @@ public partial class PathPopup : Window
     /// <summary>핀 토글 후 목록을 다시 거른다(항목의 Pinned 변경은 컬렉션 변경이 아니라 뷰가 스스로 알아채지 못한다).</summary>
     public void RefreshItems() => _view?.Refresh();
 
-    public void SetPrimaryAction(PathCardClickAction action)
-        => ActionHint.Text = action == PathCardClickAction.Copy
-            ? "카드 클릭: 경로 복사" : "카드 클릭: 파일·폴더·URL 열기";
 
     private void Collapse_Click(object sender, RoutedEventArgs e)
     {
@@ -71,7 +68,6 @@ public partial class PathPopup : Window
     private void SetCollapsed(bool collapse)
     {
         Scroller.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
-        ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
         MinHeight = collapse ? 0 : _expandedMinHeight;
         CollapseButton.Content = collapse ? "▾" : "▴";
         CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
