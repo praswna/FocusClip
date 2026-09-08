@@ -43,6 +43,7 @@ public partial class ClipboardPopup : Window
     {
         InitializeComponent();
         _expandedMinHeight = MinHeight;
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) Expand(); };
     }
 
     public void SetItems(IEnumerable<ClipItem> items)

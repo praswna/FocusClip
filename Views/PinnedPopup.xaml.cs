@@ -41,6 +41,7 @@ public partial class PinnedPopup : Window
     {
         InitializeComponent();
         _expandedMinHeight = MinHeight;
+        IsVisibleChanged += (_, e) => { if (e.NewValue is true) Expand(); };
     }
 
     /// <summary>헤더 제목("고정 클립" / "고정 경로").</summary>

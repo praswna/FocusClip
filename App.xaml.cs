@@ -314,21 +314,6 @@ public partial class App : Application
         if (_promptPopup != null) yield return _promptPopup;
     }
 
-    /// <summary>오버레이를 새로 열 때 이전 접기 상태를 지워 카드 목록을 다시 보이게 한다.</summary>
-    private void ExpandPopupsForOpening()
-    {
-        foreach (var popup in Popups())
-        {
-            switch (popup)
-            {
-                case ClipboardPopup clip: clip.Expand(); break;
-                case PathPopup path: path.Expand(); break;
-                case PinnedPopup pinned: pinned.Expand(); break;
-                case PromptPopup prompt: prompt.Expand(); break;
-            }
-        }
-    }
-
     /// <summary>팝업 헤더의 고정핀(📌) 상태 — 켜져 있으면 오토클로즈/CapsLock 에도 닫지 않는다.</summary>
     private static bool IsPopupPinned(Window w) => w switch
     {
@@ -421,7 +406,6 @@ public partial class App : Application
     {
         _prevForeground = NativeMethods.GetForegroundWindow(); // 붙여넣기 대상 기억
         RefreshActiveStates(); // 비동기 — 표시를 막지 않고, 활성 표시(IsActive)는 도크 표시 직후 한 틱 내 갱신
-        ExpandPopupsForOpening();
         _dock!.ShowAtCursor();
         _dock.SetCaps(CapsOn()); // 도크 안 [A/a] 버튼에 현재 대소문자 상태 반영
         LayoutPopups();
