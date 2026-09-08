@@ -32,6 +32,7 @@ rem Output name differs from build.bat (FocusClip.exe) so both versions coexist.
 set "DEPLOY=%LOCALAPPDATA%\FocusClip\app"
 set "FC_TMP=%TEMP%\fc-standalone"
 set "COPY_DEST=C:\Users\prasw\Dropbox\Cluade"
+if not exist "C:\Users\prasw\Dropbox" set "COPY_DEST=%USERPROFILE%\Desktop\Cluade"
 
 echo === Cleaning build intermediates ===
 if exist "bin" rmdir /s /q "bin"
