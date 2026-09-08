@@ -16,8 +16,8 @@
 
         <!-- 카드 편집(✎) 버튼: 호버 시 액센트 -->
         <Style x:Key="CardEdit" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -40,8 +40,8 @@
 
         <!-- 카드 삭제(✕) 버튼: 평평, 호버 시 빨강 -->
         <Style x:Key="CardX" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -64,8 +64,8 @@
 
         <!-- 헤더 추가(+) 버튼: 호버 시 액센트 -->
         <Style x:Key="AddBtn" TargetType="Button">
-            <Setter Property="Width" Value="20"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -97,6 +97,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- 핀 고정 시에만 보이는 이동 핸들(드래그하여 팝업 이동) -->
@@ -114,15 +115,19 @@
             </Thumb>
 
             <!-- 헤더: 제목 + 추가(+) + 팝업 핀 토글 -->
-            <Grid Grid.Row="1" Height="20" Margin="0,0,0,4">
+            <Grid Grid.Row="1" Height="26" Margin="0,0,0,4">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <TextBlock Text="프롬프트" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"
                                FontSize="10" VerticalAlignment="Center" Margin="2,0,6,0"/>
                     <Button x:Name="AddButton" Style="{StaticResource AddBtn}" Click="Add_Click"
                             ToolTip="프롬프트 추가"/>
                 </StackPanel>
+                <Button x:Name="CollapseButton" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Margin="0,0,26,0" Width="24" Height="24" Padding="0" Content="▴"
+                        Background="Transparent" BorderThickness="0" Foreground="{StaticResource AccentBrush}"
+                        FontSize="13" Cursor="Hand" ToolTip="접기" Click="Collapse_Click"/>
                 <ToggleButton x:Name="PinToggle" HorizontalAlignment="Right" VerticalAlignment="Center"
-                              Width="20" Height="18" Cursor="Hand" ToolTip="팝업 고정(자동 닫힘 해제)"
+                              Width="24" Height="24" Cursor="Hand" ToolTip="창 고정(자동 닫힘 해제)"
                               Checked="PinToggle_Changed" Unchecked="PinToggle_Changed">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
@@ -145,7 +150,10 @@
                 </ToggleButton>
             </Grid>
 
-            <ListBox Grid.Row="2" x:Name="PromptList" MaxHeight="320"
+            <TextBlock x:Name="ActionHint" Grid.Row="2" Text="카드 클릭: 직전 창에 붙여넣기" Foreground="{StaticResource GrayBrush}"
+                       FontSize="9" Margin="2,0,0,3"/>
+
+            <ListBox Grid.Row="3" x:Name="PromptList" MaxHeight="320"
                      Background="Transparent" BorderThickness="0" Padding="0"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"

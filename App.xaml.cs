@@ -187,25 +187,31 @@ public partial class App : Application
         _clipPopup.ClipPromoteRequested += item => Dispatcher.BeginInvoke(() => OnClipPromote(item));
         _clipPopup.OpenFolderRequested += () => Dispatcher.BeginInvoke(OpenSaveFolder);
         _clipPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_clipPopup));
+        _clipPopup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
         _clipPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
 
         _pathPopup = new PathPopup();
         _pathPopup.SetItems(_clipboard.Paths);
+        _pathPopup.SetPrimaryAction(_configSvc.Config.PathClickAction);
         _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
         _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
         _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
         _pathPopup.PathPinToggled += item => Dispatcher.BeginInvoke(() => OnPinToggled(item));
         _pathPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_pathPopup));
+        _pathPopup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
         _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
 
-        // 고정(📌) 항목 전용 압축 팝업 — 클립·경로 각각 하나씩, 기본 팝업 오른쪽에 뜬다.
+        // 보관(★) 항목 전용 압축 팝업 — 클립·경로 각각 하나씩, 기본 팝업 오른쪽에 뜬다.
         // 기본 팝업은 미고정 항목만 보여주므로 큼직한 고정 카드가 최근 목록을 밀어내지 않는다.
         _clipPinPopup = NewPinPopup("고정 클립", _clipboard.Items);
+        _clipPinPopup.SetPrimaryActionHint("카드 클릭: 직전 창에 붙여넣기");
         _clipPinPopup.EditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
         _clipPinPopup.PromoteRequested += item => Dispatcher.BeginInvoke(() => OnClipPromote(item));
         _clipPinPopup.OpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
 
         _pathPinPopup = NewPinPopup("고정 경로", _clipboard.Paths);
+        _pathPinPopup.SetPrimaryActionHint(_configSvc.Config.PathClickAction == PathCardClickAction.Copy
+            ? "카드 클릭: 경로 복사" : "카드 클릭: 파일·폴더·URL 열기");
         _pathPinPopup.OpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
         _pathPinPopup.PathPrimaryRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
 
@@ -215,8 +221,9 @@ public partial class App : Application
         _promptPopup.PromptSelected += p => Dispatcher.BeginInvoke(() => OnPromptSelected(p));
         _promptPopup.PromptAddRequested += () => Dispatcher.BeginInvoke(OnPromptAdd);
         _promptPopup.PromptEditRequested += p => Dispatcher.BeginInvoke(() => OnPromptEdit(p));
-        _promptPopup.PromptDeleteRequested += p => Dispatcher.BeginInvoke(() => _prompts.Remove(p));
+        _promptPopup.PromptDeleteRequested += p => Dispatcher.BeginInvoke(() => OnPromptRemove(p));
         _promptPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_promptPopup));
+        _promptPopup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
         _promptPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱"));
     }
 
@@ -230,6 +237,7 @@ public partial class App : Application
         popup.UnpinRequested += item => Dispatcher.BeginInvoke(() => OnPinToggled(item));
         popup.DeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
         popup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(popup));
+        popup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
         popup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
         return popup;
     }
@@ -246,9 +254,29 @@ public partial class App : Application
     /// <summary>카드 삭제(목록에서만 제거 — 본문 파일은 보존) → 목록·배치 갱신.</summary>
     private void OnClipRemove(ClipItem item)
     {
-        _clipboard.Remove(item);
+        int index = _clipboard.RemoveForUndo(item);
+        if (index < 0) return;
         RefreshPopupLists();
         RelayoutPopups();
+        string label = item.IsImage ? "이미지" : item.IsPath ? item.PathName : item.Snippet;
+        _toast?.ShowUndo(label,
+            undo: () =>
+            {
+                _clipboard.RestoreRemoved(item, index);
+                RefreshPopupLists();
+                RelayoutPopups();
+            },
+            commit: () => ClipboardService.FinalizeRemove(item));
+    }
+
+    private void OnPromptRemove(PromptItem item)
+    {
+        int index = _prompts.RemoveForUndo(item);
+        if (index < 0) return;
+        RelayoutPopups();
+        _toast?.ShowUndo(item.DisplayTitle,
+            undo: () => { _prompts.RestoreRemoved(item, index); RelayoutPopups(); },
+            commit: () => { });
     }
 
     /// <summary>항목의 Pinned 변경은 컬렉션 변경이 아니라 뷰가 스스로 알아채지 못하므로, 네 팝업의 필터를 다시 돌린다.</summary>
@@ -750,7 +778,14 @@ public partial class App : Application
         if (_settings == null)
         {
             _settings = new SettingsWindow(_configSvc, _icons, _apps,
-                onChanged: () => { RebuildSidebar(); RefreshActiveStates(); },
+                onChanged: () =>
+                {
+                    RebuildSidebar();
+                    RefreshActiveStates();
+                    _pathPopup?.SetPrimaryAction(_configSvc.Config.PathClickAction);
+                    _pathPinPopup?.SetPrimaryActionHint(_configSvc.Config.PathClickAction == PathCardClickAction.Copy
+                        ? "카드 클릭: 경로 복사" : "카드 클릭: 파일·폴더·URL 열기");
+                },
                 onHotkeyChanged: vk => { if (_hotkey != null) _hotkey.HotkeyVk = vk; });
             _settings.Closed += (_, _) => _settings = null;
             _settings.Show();

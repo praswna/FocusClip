@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 
@@ -9,12 +10,18 @@ public partial class PromptEditWindow : Window
 {
     public string ResultTitle { get; private set; } = "";
     public string ResultText { get; private set; } = "";
+    private readonly string _initialTitle;
+    private readonly string _initialText;
+    private bool _closeAccepted;
 
     public PromptEditWindow(string initialTitle = "", string initialText = "")
     {
         InitializeComponent();
-        TitleBox.Text = initialTitle ?? "";
-        BodyBox.Text = initialText ?? "";
+        _initialTitle = initialTitle ?? "";
+        _initialText = initialText ?? "";
+        TitleBox.Text = _initialTitle;
+        BodyBox.Text = _initialText;
+        PreviewKeyDown += Window_PreviewKeyDown;
         Loaded += (_, _) =>
         {
             // 제목이 비어 있으면 제목부터, 아니면 본문에 포커스
@@ -40,8 +47,37 @@ public partial class PromptEditWindow : Window
         }
         ResultTitle = TitleBox.Text.Trim();
         ResultText = BodyBox.Text;
+        _closeAccepted = true;
         DialogResult = true;
     }
 
-    private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.S && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            e.Handled = true;
+            Save_Click(sender, e);
+        }
+        else if (e.Key == Key.Escape) { e.Handled = true; TryCancel(); }
+    }
+
+    private bool ConfirmDiscard()
+        => (TitleBox.Text == _initialTitle && BodyBox.Text == _initialText)
+            || MessageBox.Show(this, "수정한 내용을 버릴까요?", "프롬프트 편집",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    private void TryCancel()
+    {
+        if (!ConfirmDiscard()) return;
+        _closeAccepted = true;
+        DialogResult = false;
+    }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e) => TryCancel();
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_closeAccepted && !ConfirmDiscard()) e.Cancel = true;
+        base.OnClosing(e);
+    }
 }

@@ -40,8 +40,8 @@
                 <TextBlock x:Name="ZoomLabel" Text="100%" Foreground="{StaticResource AccentBrush}"
                            FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,0,0" Width="48"/>
                 <Border Width="1" Background="{StaticResource LineBrush}" Margin="6,2"/>
-                <Button x:Name="UndoBtn" Content="↶ 실행취소" Click="Undo_Click"/>
-                <Button x:Name="RedoBtn" Content="↷ 다시실행" Click="Redo_Click"/>
+                <Button x:Name="UndoBtn" Content="↶ 실행취소" Click="Undo_Click" ToolTip="Ctrl+Z"/>
+                <Button x:Name="RedoBtn" Content="↷ 다시실행" Click="Redo_Click" ToolTip="Ctrl+Y"/>
                 <Button Content="🗑 전체지우기" Click="Clear_Click"/>
             </StackPanel>
         </Border>
@@ -56,8 +56,8 @@
                                VerticalAlignment="Center" Margin="8,0,0,0"/>
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="저장" Click="Save_Click" Padding="16,4"/>
-                    <Button Content="취소" Click="Cancel_Click" Padding="16,4"/>
+                    <Button Content="저장" Click="Save_Click" Padding="16,4" ToolTip="Ctrl+S"/>
+                    <Button Content="취소" Click="Cancel_Click" Padding="16,4" ToolTip="Esc"/>
                 </StackPanel>
             </DockPanel>
         </Border>

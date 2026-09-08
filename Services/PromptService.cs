@@ -58,6 +58,20 @@ public sealed class PromptService
         if (Prompts.Remove(item)) Save();
     }
 
+    public int RemoveForUndo(PromptItem item)
+    {
+        int index = Prompts.IndexOf(item);
+        if (index >= 0) { Prompts.RemoveAt(index); Save(); }
+        return index;
+    }
+
+    public void RestoreRemoved(PromptItem item, int index)
+    {
+        if (Prompts.Contains(item)) return;
+        Prompts.Insert(Math.Max(0, Math.Min(index, Prompts.Count)), item);
+        Save();
+    }
+
     /// <summary>목록 순서 변경 후 저장(재정렬용, 현재 UI 미사용).</summary>
     public void Move(int from, int to)
     {

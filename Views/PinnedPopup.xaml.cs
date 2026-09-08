@@ -15,29 +15,32 @@ using FocusClip.Services;
 
 namespace FocusClip.Views;
 
-/// <summary>고정(📌)한 항목만 모아 관리하는 압축 팝업. 클립보드·경로 팝업이 각각 하나씩 쓰며,
+/// <summary>보관(★)한 항목만 모아 관리하는 압축 팝업. 클립보드·경로 팝업이 각각 하나씩 쓰며,
 /// 기본 팝업 오른쪽에 뜬다. 기본 팝업은 미고정 항목만 보여주므로 고정 카드가 목록을 잡아먹지 않는다.
 /// 카드는 썸네일+두 줄 텍스트의 한 줄짜리 압축 형태고, 동작(클립 클릭=붙여넣기·경로 클릭=열기, 드래그=드롭)은 기본 팝업과 같다.</summary>
 public partial class PinnedPopup : Window
 {
     public event Action<ClipItem>? ItemSelected;      // 클립 카드 클릭·경로 카드 📋 → 붙여넣기
-    public event Action<ClipItem>? UnpinRequested;    // 📌 → 고정 해제(기본 팝업으로 돌아감)
+    public event Action<ClipItem>? UnpinRequested;    // ★ → 보관 해제(기본 팝업으로 돌아감)
     public event Action<ClipItem>? DeleteRequested;   // ✕ → 목록에서 제거
     public event Action<ClipItem>? OpenRequested;     // 클립 📂 → 저장 위치 열기 / 경로 카드 클릭 → 경로·URL 열기
     public event Action<ClipItem>? PathPrimaryRequested; // 경로 카드 클릭 → 설정된 열기/복사 동작
     public event Action<ClipItem>? EditRequested;     // ✎ → 텍스트·이미지 편집(클립 전용)
     public event Action<ClipItem>? PromoteRequested;  // 🔖 → 프롬프트 보관함으로(텍스트 클립 전용)
     public event Action? PinChanged;                  // 팝업 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
+    public event Action? CollapseChanged;             // 접기/펼치기 후 팝업 묶음 재배치
     public event Action? DragFailed;                  // 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>팝업 핀(자동 닫힘 해제). true면 외부 클릭/앱 활성화에도 닫지 않음.</summary>
     public bool Pinned { get; private set; }
 
     private CollectionViewSource? _cvs;
+    private readonly double _expandedMinHeight;
 
     public PinnedPopup()
     {
         InitializeComponent();
+        _expandedMinHeight = MinHeight;
     }
 
     /// <summary>헤더 제목("고정 클립" / "고정 경로").</summary>
@@ -65,6 +68,20 @@ public partial class PinnedPopup : Window
     {
         _cvs?.View?.Refresh();
         UpdateCount();
+    }
+
+    public void SetPrimaryActionHint(string text) => ActionHint.Text = text;
+
+    private void Collapse_Click(object sender, RoutedEventArgs e)
+    {
+        bool collapse = Scroller.Visibility == Visibility.Visible;
+        Scroller.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        MinHeight = collapse ? 0 : _expandedMinHeight;
+        CollapseButton.Content = collapse ? "▾" : "▴";
+        CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
+        UpdateLayout();
+        CollapseChanged?.Invoke();
     }
 
     /// <summary>현재 보이는(고정된) 항목 수.</summary>

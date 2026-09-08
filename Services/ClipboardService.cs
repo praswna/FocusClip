@@ -540,12 +540,35 @@ public sealed class ClipboardService : IDisposable
     /// <summary>클립 항목을 목록에서만 제거한다. 본문 파일은 지우지 않는다 — media 폴더는 사용자가 직접 관리(완전 수동 삭제).</summary>
     public void Remove(ClipItem item)
     {
-        if (!Items.Remove(item)) Paths.Remove(item); // 경로 항목은 Paths에 있음
+        RemoveForUndo(item);
+        FinalizeRemove(item);
+    }
+
+    /// <summary>실행 취소 가능하도록 항목을 목록에서만 빼고 원본 데이터는 잠시 유지한다.</summary>
+    public int RemoveForUndo(ClipItem item)
+    {
+        var collection = item.IsPath ? Paths : Items;
+        int index = collection.IndexOf(item);
+        if (index >= 0) collection.RemoveAt(index);
+        ScheduleSave();
+        return index;
+    }
+
+    public void RestoreRemoved(ClipItem item, int index)
+    {
+        var collection = item.IsPath ? Paths : Items;
+        if (collection.Contains(item)) return;
+        item.Removed = false;
+        collection.Insert(Math.Max(0, Math.Min(index, collection.Count)), item);
+        ScheduleSave();
+    }
+
+    public static void FinalizeRemove(ClipItem item)
+    {
         item.Removed = true;
         item.FullImage = null;
         item.ImageBytes = null;
         item.ImageProcessing = false;
-        ScheduleSave();
     }
 
     /// <summary>클립의 원본 이미지를 필요할 때만 복원한다. 미고정 항목은 PNG 바이트에서,

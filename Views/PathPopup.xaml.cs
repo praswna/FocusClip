@@ -21,6 +21,7 @@ public partial class PathPopup : Window
     public event Action<ClipItem>? PathOpenRequested; // 카드 클릭 → 로컬 경로/URL 열기(기본 동작)
     public event Action<ClipItem>? PathPinToggled;    // 카드 고정핀 토글
     public event Action? PinChanged;                  // 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
+    public event Action? CollapseChanged;             // 접기/펼치기 후 팝업 묶음 재배치
     public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>팝업 핀(자동 닫힘 해제). true면 외부 클릭/앱 활성화에도 닫지 않음.</summary>
@@ -29,16 +30,18 @@ public partial class PathPopup : Window
     private enum PathFilter { All, Local, Url }
     private PathFilter _filter = PathFilter.All;
     private ICollectionView? _view;
+    private readonly double _expandedMinHeight;
 
     public PathPopup()
     {
         InitializeComponent();
+        _expandedMinHeight = MinHeight;
     }
 
     public void SetItems(IEnumerable<ClipItem> items)
     {
         _view = CollectionViewSource.GetDefaultView(items);
-        // 고정(📌)된 경로는 오른쪽 고정 팝업(PinnedPopup)이 압축 카드로 맡는다 — 여기는 미고정 경로만.
+        // 보관(★)된 경로는 오른쪽 고정 팝업(PinnedPopup)이 압축 카드로 맡는다 — 여기는 미고정 경로만.
         _view.Filter = o => o is ClipItem c && !c.Pinned && _filter switch
         {
             PathFilter.Local => !c.IsUrl,
@@ -50,6 +53,22 @@ public partial class PathPopup : Window
 
     /// <summary>핀 토글 후 목록을 다시 거른다(항목의 Pinned 변경은 컬렉션 변경이 아니라 뷰가 스스로 알아채지 못한다).</summary>
     public void RefreshItems() => _view?.Refresh();
+
+    public void SetPrimaryAction(PathCardClickAction action)
+        => ActionHint.Text = action == PathCardClickAction.Copy
+            ? "카드 클릭: 경로 복사" : "카드 클릭: 파일·폴더·URL 열기";
+
+    private void Collapse_Click(object sender, RoutedEventArgs e)
+    {
+        bool collapse = Scroller.Visibility == Visibility.Visible;
+        Scroller.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        MinHeight = collapse ? 0 : _expandedMinHeight;
+        CollapseButton.Content = collapse ? "▾" : "▴";
+        CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
+        UpdateLayout();
+        CollapseChanged?.Invoke();
+    }
 
     // ── 로컬/URL 필터 토글 ──
     private void Filter_All_Checked(object sender, RoutedEventArgs e) => ApplyFilter(PathFilter.All);

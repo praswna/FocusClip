@@ -16,9 +16,14 @@
             CornerRadius="6"
             Padding="12,8">
         <StackPanel>
-            <TextBlock Text="클립보드에 복사됨" Foreground="{StaticResource AccentBrush}" FontSize="11"/>
-            <TextBlock x:Name="BodyText" Foreground="White" FontSize="12" TextWrapping="NoWrap"
-                       TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+            <TextBlock x:Name="HeaderText" Text="클립보드에 복사됨" Foreground="{StaticResource AccentBrush}" FontSize="11"/>
+            <Grid Margin="0,2,0,0">
+                <TextBlock x:Name="BodyText" Foreground="White" FontSize="12" TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,62,0"/>
+                <Button x:Name="UndoButton" Content="실행 취소" HorizontalAlignment="Right"
+                        Padding="7,3" Foreground="White" Background="{StaticResource AccentBrush}"
+                        BorderThickness="0" Cursor="Hand" Visibility="Collapsed" Click="Undo_Click"/>
+            </Grid>
             <Image x:Name="BodyImage" Stretch="Uniform" StretchDirection="DownOnly"
                    MaxWidth="234" MaxHeight="96" HorizontalAlignment="Left"
                    Margin="0,4,0,0" Visibility="Collapsed"/>

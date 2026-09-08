@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 
@@ -11,12 +12,16 @@ public partial class TextEditWindow : Window
 
     public string ResultText { get; private set; } = "";
     public Mode SaveMode { get; private set; } = Mode.Overwrite;
+    private readonly string _initialText;
+    private bool _closeAccepted;
 
     public TextEditWindow(string initialText)
     {
         InitializeComponent();
-        Editor.Text = initialText ?? "";
+        _initialText = initialText ?? "";
+        Editor.Text = _initialText;
         Loaded += (_, _) => { Editor.Focus(); Editor.CaretIndex = Editor.Text.Length; };
+        PreviewKeyDown += Window_PreviewKeyDown;
     }
 
     // CM ZoomTextEdit: 그냥 휠로 폰트 크기 ±
@@ -31,6 +36,7 @@ public partial class TextEditWindow : Window
     {
         ResultText = Editor.Text;
         SaveMode = Mode.Overwrite;
+        _closeAccepted = true;
         DialogResult = true;
     }
 
@@ -38,8 +44,37 @@ public partial class TextEditWindow : Window
     {
         ResultText = Editor.Text;
         SaveMode = Mode.New;
+        _closeAccepted = true;
         DialogResult = true;
     }
 
-    private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.S && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            e.Handled = true;
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) SaveNew_Click(sender, e);
+            else Overwrite_Click(sender, e);
+        }
+        else if (e.Key == Key.Escape) { e.Handled = true; TryCancel(); }
+    }
+
+    private bool ConfirmDiscard()
+        => Editor.Text == _initialText || MessageBox.Show(this, "수정한 내용을 버릴까요?", "텍스트 편집",
+            MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    private void TryCancel()
+    {
+        if (!ConfirmDiscard()) return;
+        _closeAccepted = true;
+        DialogResult = false;
+    }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e) => TryCancel();
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_closeAccepted && !ConfirmDiscard()) e.Cancel = true;
+        base.OnClosing(e);
+    }
 }

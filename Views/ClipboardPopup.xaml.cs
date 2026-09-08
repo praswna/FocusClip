@@ -28,6 +28,7 @@ public partial class ClipboardPopup : Window
     public event Action<ClipItem>? ClipPromoteRequested; // 텍스트 클립 → 프롬프트 보관함으로 승격
     public event Action? OpenFolderRequested;         // 헤더 파일 수 클릭 → 저장 폴더 열기
     public event Action? PinChanged;                  // 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
+    public event Action? CollapseChanged;             // 접기/펼치기 후 팝업 묶음 재배치
     public event Action? DragFailed;                  // P001: 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>C1: 팝업 핀(자동 닫힘 해제). true면 앱 활성화/클립 선택에도 닫지 않음.</summary>
@@ -36,16 +37,18 @@ public partial class ClipboardPopup : Window
     private enum ClipFilter { All, Text, Image }
     private ClipFilter _filter = ClipFilter.All;
     private ICollectionView? _view;
+    private readonly double _expandedMinHeight;
 
     public ClipboardPopup()
     {
         InitializeComponent();
+        _expandedMinHeight = MinHeight;
     }
 
     public void SetItems(IEnumerable<ClipItem> items)
     {
         _view = CollectionViewSource.GetDefaultView(items);
-        // 고정(📌)된 카드는 오른쪽 고정 팝업(PinnedPopup)이 압축 카드로 맡는다 — 여기는 미고정 카드만.
+        // 보관(★)된 카드는 오른쪽 고정 팝업(PinnedPopup)이 압축 카드로 맡는다 — 여기는 미고정 카드만.
         _view.Filter = o => o is ClipItem c && !c.Pinned && _filter switch
         {
             ClipFilter.Text => !c.IsImage,
@@ -57,6 +60,18 @@ public partial class ClipboardPopup : Window
 
     /// <summary>핀 토글 후 목록을 다시 거른다(항목의 Pinned 변경은 컬렉션 변경이 아니라 뷰가 스스로 알아채지 못한다).</summary>
     public void RefreshItems() => _view?.Refresh();
+
+    private void Collapse_Click(object sender, RoutedEventArgs e)
+    {
+        bool collapse = Scroller.Visibility == Visibility.Visible;
+        Scroller.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        MinHeight = collapse ? 0 : _expandedMinHeight;
+        CollapseButton.Content = collapse ? "▾" : "▴";
+        CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
+        UpdateLayout();
+        CollapseChanged?.Invoke();
+    }
 
     // ── 텍스트/이미지 필터 토글 ──
     private void Filter_All_Checked(object sender, RoutedEventArgs e) => ApplyFilter(ClipFilter.All);
@@ -222,7 +237,7 @@ public partial class ClipboardPopup : Window
     /// 본문 삭제가 완전 수동이라 폴더가 무한정 커질 수 있으므로, 디렉터리 열거는 백그라운드에서 하고 UI는 블로킹하지 않는다.</summary>
     private void UpdateFolderCount()
     {
-        FolderCount.Text = "📁 …"; // 즉시 표시 — 팝업 오픈을 막지 않는다
+        FolderCount.Text = "저장 …"; // 즉시 표시 — 팝업 오픈을 막지 않는다
         string dir = ClipboardService.SaveDir; // Screenshots 루트(텍스트·이미지 공용)
         System.Threading.Tasks.Task.Run(() =>
         {
@@ -236,7 +251,7 @@ public partial class ClipboardPopup : Window
                                  || f.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
             }
             catch { }
-            Dispatcher.BeginInvoke(() => FolderCount.Text = $"📁 {n}");
+            Dispatcher.BeginInvoke(() => FolderCount.Text = $"저장 {n}");
         });
     }
 

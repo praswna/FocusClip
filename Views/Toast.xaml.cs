@@ -10,12 +10,18 @@ namespace FocusClip.Views;
 public partial class Toast : Window
 {
     private readonly DispatcherTimer _timer;
+    private Action? _undoAction;
+    private Action? _commitAction;
 
     public Toast()
     {
         InitializeComponent();
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1400) };
-        _timer.Tick += (_, _) => { _timer.Stop(); Hide(); };
+        _timer.Tick += (_, _) =>
+        {
+            if (_undoAction != null || _commitAction != null) FinishUndo(false);
+            else { _timer.Stop(); Hide(); }
+        };
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -26,6 +32,9 @@ public partial class Toast : Window
 
     public void ShowToast(string text)
     {
+        FinishUndo(false);
+        HeaderText.Text = "클립보드에 복사됨";
+        UndoButton.Visibility = Visibility.Collapsed;
         // 개행이 있으면 NoWrap이라도 줄이 늘어 토스트 높이/위치가 흔들리므로 한 줄로 정리.
         BodyText.Text = string.IsNullOrEmpty(text) ? "" : text.ReplaceLineEndings(" ");
         BodyText.Visibility = Visibility.Visible;
@@ -38,10 +47,41 @@ public partial class Toast : Window
     public void ShowToast(System.Windows.Media.ImageSource? image)
     {
         if (image == null) { ShowToast("🖼 이미지"); return; }
+        FinishUndo(false);
+        HeaderText.Text = "클립보드에 복사됨";
+        UndoButton.Visibility = Visibility.Collapsed;
         BodyText.Visibility = Visibility.Collapsed;
         BodyImage.Source = image;
         BodyImage.Visibility = Visibility.Visible;
         ShowAndPosition();
+    }
+
+    public void ShowUndo(string text, Action undo, Action commit)
+    {
+        FinishUndo(false);
+        _undoAction = undo;
+        _commitAction = commit;
+        HeaderText.Text = "삭제됨 · 5초 동안 복구 가능";
+        BodyText.Text = text.ReplaceLineEndings(" ");
+        BodyText.Visibility = Visibility.Visible;
+        BodyImage.Visibility = Visibility.Collapsed;
+        BodyImage.Source = null;
+        UndoButton.Visibility = Visibility.Visible;
+        _timer.Interval = TimeSpan.FromSeconds(5);
+        ShowAndPosition();
+    }
+
+    private void Undo_Click(object sender, RoutedEventArgs e) => FinishUndo(true);
+
+    private void FinishUndo(bool undo)
+    {
+        _timer.Stop();
+        var action = undo ? _undoAction : _commitAction;
+        _undoAction = null;
+        _commitAction = null;
+        if (action != null) { try { action(); } catch { } }
+        if (undo || action != null) Hide();
+        _timer.Interval = TimeSpan.FromMilliseconds(1400);
     }
 
     private void ShowAndPosition()

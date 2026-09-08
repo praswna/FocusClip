@@ -20,17 +20,32 @@ public partial class PromptPopup : Window
     public event Action<PromptItem>? PromptDeleteRequested;
     public event Action? PromptAddRequested;
     public event Action? PinChanged;   // 핀 토글 변경(앱이 단독 핀 팝업 정리에 사용)
+    public event Action? CollapseChanged; // 접기/펼치기 후 팝업 묶음 재배치
     public event Action? DragFailed;   // 드롭 미지원 앱에 드롭 시도 시
 
     /// <summary>팝업 핀(자동 닫힘 해제). true면 외부 클릭/앱 활성화에도 닫지 않음.</summary>
     public bool Pinned { get; private set; }
+    private readonly double _expandedMinHeight;
 
     public PromptPopup()
     {
         InitializeComponent();
+        _expandedMinHeight = MinHeight;
     }
 
     public void SetItems(IEnumerable<PromptItem> items) => PromptList.ItemsSource = items;
+
+    private void Collapse_Click(object sender, RoutedEventArgs e)
+    {
+        bool collapse = PromptList.Visibility == Visibility.Visible;
+        PromptList.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        ActionHint.Visibility = collapse ? Visibility.Collapsed : Visibility.Visible;
+        MinHeight = collapse ? 0 : _expandedMinHeight;
+        CollapseButton.Content = collapse ? "▾" : "▴";
+        CollapseButton.ToolTip = collapse ? "펼치기" : "접기";
+        UpdateLayout();
+        CollapseChanged?.Invoke();
+    }
 
     private void Add_Click(object sender, RoutedEventArgs e)
     {

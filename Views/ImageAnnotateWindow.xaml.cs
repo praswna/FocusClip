@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -34,6 +35,9 @@ public partial class ImageAnnotateWindow : Window
     private bool _cropMode;
     private bool _cropDragging;
     private Point _cropStart;
+    private bool _dirty;
+    private bool _cropChanged;
+    private bool _closeAccepted;
 
     public ImageAnnotateWindow(BitmapSource src)
     {
@@ -59,11 +63,13 @@ public partial class ImageAnnotateWindow : Window
         Ink.Strokes.StrokesChanged += (_, _) =>
         {
             if (_suppress) return;
+            _dirty = _cropChanged || Ink.Strokes.Count > 0;
             _undo.Push(_last);
             _redo.Clear();
             _last = Clone(Ink.Strokes);
             UpdateHistoryButtons();
         };
+        PreviewKeyDown += Window_PreviewKeyDown;
         UpdateHistoryButtons();
     }
 
@@ -134,6 +140,8 @@ public partial class ImageAnnotateWindow : Window
             var m = Matrix.Identity; m.Translate(-x, -y);
             foreach (var s in Ink.Strokes) s.Transform(m, false); // 주석을 자른 좌표계로 이동
             _undo.Clear(); _redo.Clear(); _last = Clone(Ink.Strokes); // 자르기는 구조 변경 → 되돌리기 초기화
+            _cropChanged = true;
+            _dirty = true;
             UpdateHistoryButtons();
         }
         catch { }
@@ -186,6 +194,7 @@ public partial class ImageAnnotateWindow : Window
         foreach (var s in snapshot) Ink.Strokes.Add(s.Clone());
         _suppress = false;
         _last = Clone(Ink.Strokes);
+        _dirty = _cropChanged || Ink.Strokes.Count > 0;
     }
 
     private void UpdateHistoryButtons()
@@ -295,13 +304,47 @@ public partial class ImageAnnotateWindow : Window
             rtb.Render(dv);
             rtb.Freeze();
             Result = rtb;
+            _closeAccepted = true;
             DialogResult = true;
         }
         catch
         {
+            _closeAccepted = true;
             DialogResult = false;
         }
     }
 
-    private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            if (e.Key == Key.S) { e.Handled = true; Save_Click(sender, e); }
+            else if (e.Key == Key.Z) { e.Handled = true; Undo_Click(sender, e); }
+            else if (e.Key == Key.Y) { e.Handled = true; Redo_Click(sender, e); }
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            if (_cropMode) ExitCropMode(); else TryCancel();
+        }
+    }
+
+    private bool ConfirmDiscard()
+        => !_dirty || MessageBox.Show(this, "이미지 편집 내용을 버릴까요?", "이미지 편집",
+            MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    private void TryCancel()
+    {
+        if (!ConfirmDiscard()) return;
+        _closeAccepted = true;
+        DialogResult = false;
+    }
+
+    private void Cancel_Click(object sender, RoutedEventArgs e) => TryCancel();
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!_closeAccepted && !ConfirmDiscard()) e.Cancel = true;
+        base.OnClosing(e);
+    }
 }

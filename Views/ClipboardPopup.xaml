@@ -16,8 +16,8 @@
 
         <!-- 카드 삭제(✕) 버튼: 평평, 호버 시 빨강 -->
         <Style x:Key="CardX" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -40,8 +40,8 @@
 
         <!-- 카드 편집(✎) 버튼 -->
         <Style x:Key="CardEdit" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -64,8 +64,8 @@
 
         <!-- 카드 프롬프트 승격(🔖) 버튼: 텍스트 클립을 프롬프트 보관함으로 -->
         <Style x:Key="CardPromote" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -87,8 +87,8 @@
 
         <!-- 카드 경로열기(📂) 버튼: 저장된 본문 파일 위치를 탐색기로 -->
         <Style x:Key="CardOpen" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -110,15 +110,15 @@
 
         <!-- 카드 핀(📌) 버튼: 핀 상태면 액센트색 -->
         <Style x:Key="CardPin" TargetType="Button">
-            <Setter Property="Width" Value="18"/>
-            <Setter Property="Height" Value="18"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="b" Background="Transparent" CornerRadius="9">
-                            <TextBlock Text="📌" FontSize="10" HorizontalAlignment="Center"
+                            <TextBlock Text="★" FontSize="11" HorizontalAlignment="Center"
                                        VerticalAlignment="Center" Opacity="0.55"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -168,6 +168,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- 핀 고정 시에만 보이는 이동 핸들(드래그하여 팝업 이동) -->
@@ -185,7 +186,7 @@
             </Thumb>
 
             <!-- 헤더: 필터 세그먼트(전체/텍스트/이미지) + 팝업 핀 토글 -->
-            <Grid Grid.Row="1" Height="20" Margin="0,0,0,4">
+            <Grid Grid.Row="1" Height="26" Margin="0,0,0,4">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <TextBlock Text="클립보드" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"
                                FontSize="10" VerticalAlignment="Center" Margin="2,0,8,0"/>
@@ -197,11 +198,15 @@
                                  Content="이미지" Checked="Filter_Image_Checked"/>
                 </StackPanel>
                 <TextBlock x:Name="FolderCount" HorizontalAlignment="Right" VerticalAlignment="Center"
-                           Margin="0,0,24,0" FontSize="10" Foreground="{StaticResource GrayBrush}"
+                           Margin="0,0,52,0" FontSize="10" Foreground="{StaticResource GrayBrush}"
                            Cursor="Hand" ToolTip="저장 폴더의 파일 수 (클릭 = 폴더 열기)"
                            MouseLeftButtonUp="FolderCount_Click"/>
+                <Button x:Name="CollapseButton" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Margin="0,0,26,0" Width="24" Height="24" Padding="0" Content="▴"
+                        Background="Transparent" BorderThickness="0" Foreground="{StaticResource AccentBrush}"
+                        FontSize="13" Cursor="Hand" ToolTip="접기" Click="Collapse_Click"/>
                 <ToggleButton x:Name="PinToggle" HorizontalAlignment="Right" VerticalAlignment="Center"
-                              Width="20" Height="18" Cursor="Hand" ToolTip="팝업 고정(자동 닫힘 해제)"
+                              Width="24" Height="24" Cursor="Hand" ToolTip="창 고정(자동 닫힘 해제)"
                               Checked="PinToggle_Changed" Unchecked="PinToggle_Changed">
                     <ToggleButton.Template>
                         <ControlTemplate TargetType="ToggleButton">
@@ -224,7 +229,10 @@
                 </ToggleButton>
             </Grid>
 
-            <ScrollViewer Grid.Row="2" x:Name="Scroller" VerticalScrollBarVisibility="Auto" MaxHeight="320"
+            <TextBlock x:Name="ActionHint" Grid.Row="2" Text="카드 클릭: 직전 창에 붙여넣기" Foreground="{StaticResource GrayBrush}"
+                       FontSize="9" Margin="2,0,0,3"/>
+
+            <ScrollViewer Grid.Row="3" x:Name="Scroller" VerticalScrollBarVisibility="Auto" MaxHeight="320"
                           PreviewMouseWheel="Scroller_PreviewMouseWheel">
                 <ItemsControl x:Name="ClipList">
                     <ItemsControl.ItemTemplate>
@@ -290,7 +298,7 @@
                                             </Button.Style>
                                         </Button>
                                         <Button Style="{StaticResource CardPin}" Click="Pin_Click"
-                                                Tag="{Binding}" ToolTip="고정(오른쪽 고정 팝업으로 이동)"/>
+                                                Tag="{Binding}" ToolTip="보관함에 고정(오른쪽 고정 팝업으로 이동)"/>
                                         <Button Style="{StaticResource CardOpen}" Click="Open_Click"
                                                 Tag="{Binding}" ToolTip="저장 위치 열기"/>
                                         <Button Style="{StaticResource CardX}" Click="Delete_Click"

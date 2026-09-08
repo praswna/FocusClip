@@ -42,8 +42,8 @@
                  PreviewMouseWheel="Body_PreviewMouseWheel"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="저장" Click="Save_Click" Background="{StaticResource AccentBrush}"/>
-            <Button Content="취소" Click="Cancel_Click"/>
+            <Button Content="저장" Click="Save_Click" Background="{StaticResource AccentBrush}" ToolTip="Ctrl+S"/>
+            <Button Content="취소" Click="Cancel_Click" ToolTip="Esc"/>
         </StackPanel>
     </Grid>
 </Window>

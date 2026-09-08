@@ -34,10 +34,10 @@
                  PreviewMouseWheel="Editor_PreviewMouseWheel"/>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
-            <Button Content="원본 덮어쓰기" Click="Overwrite_Click"/>
+            <Button Content="원본 덮어쓰기" Click="Overwrite_Click" ToolTip="Ctrl+S"/>
             <Button Content="새 클립보드로 생성" Click="SaveNew_Click"
-                    Background="{StaticResource AccentBrush}"/>
-            <Button Content="취소" Click="Cancel_Click"/>
+                    Background="{StaticResource AccentBrush}" ToolTip="Ctrl+Shift+S"/>
+            <Button Content="취소" Click="Cancel_Click" ToolTip="Esc"/>
         </StackPanel>
     </Grid>
 </Window>
