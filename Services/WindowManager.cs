@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text;
 using FocusClip.Interop;
 using FocusClip.Models;
 
@@ -17,6 +18,48 @@ public sealed class WindowManager
         IntPtr h = FindMainWindow(app);
         if (h != IntPtr.Zero) { NativeMethods.ForceForeground(h); return; }
         Run(app);
+    }
+
+    /// <summary>열려 있는 탐색기 폴더 창 중 Z-order 맨 아래(가장 오래 안 본) 창을 앞으로 올린다.
+    /// 앞으로 올린 창이 맨 위로 가므로, 연타하면 열린 창 전체를 한 바퀴 순환한다
+    /// — 별도로 순서를 기억할 필요가 없다. 열린 폴더 창이 없으면 false.</summary>
+    public static bool FocusNextExplorerWindow()
+    {
+        IntPtr bottom = IntPtr.Zero;
+        try
+        {
+            // EnumWindows 는 Z-order 위→아래 순으로 돈다 → 마지막으로 만난 폴더 창이 맨 아래 창.
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (!NativeMethods.IsWindowVisible(hwnd)) return true;
+                if (NativeMethods.GetWindow(hwnd, NativeMethods.GW_OWNER) != IntPtr.Zero) return true;
+                if (IsFolderWindow(hwnd)) bottom = hwnd;
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { }
+
+        if (bottom == IntPtr.Zero) return false;
+        NativeMethods.ForceForeground(bottom);
+        return true;
+    }
+
+    /// <summary>탐색기 폴더 창인지(클래스명으로 판정). 폴더 창은 전부 explorer.exe 소유라
+    /// 실행 파일명만으로는 바탕화면(Progman)·작업표시줄과 구분되지 않는다.</summary>
+    private static bool IsFolderWindow(IntPtr hwnd)
+    {
+        var name = new StringBuilder(64);
+        if (NativeMethods.GetClassName(hwnd, name, name.Capacity) <= 0) return false;
+        string cls = name.ToString();
+        return cls == "CabinetWClass"    // 일반 폴더 창
+            || cls == "ExploreWClass";   // 탐색 창(트리 보기)
+    }
+
+    /// <summary>윈도우 기본 위치로 탐색기를 새로 연다(인자 없이 실행 → '파일 탐색기 열기' 설정을 따름).</summary>
+    public static void OpenDefaultExplorer()
+    {
+        try { Process.Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true }); }
+        catch { }
     }
 
     /// <summary>대상 창의 항상-위 상태를 토글하고 새 상태를 반환(창이 없으면 false).</summary>

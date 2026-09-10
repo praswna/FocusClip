@@ -27,6 +27,7 @@ public sealed class HotkeyService : IDisposable
     public event Action? HotkeyPressed;       // 단축키 토글
     public event Action<int>? NumberPressed;  // 1~4 (도크 표시 중)
     public event Action? EscapePressed;       // Esc (도크 표시 중)
+    public event Action? FolderCycleRequested; // ` (도크 표시 중) → 탐색기 폴더 창 순환
     public event Action? DismissRequested;    // 도크 표시 중 그 외 키 입력 → 오토클로즈(키는 통과)
 
     public HotkeyService()
@@ -75,6 +76,13 @@ public sealed class HotkeyService : IDisposable
                 if (vk == 0x1B) // Esc
                 {
                     Raise(EscapePressed);
+                    return (IntPtr)1;
+                }
+                // ` : 열린 탐색기 폴더 창을 순환. 도크는 열어 두므로 연타하면 계속 다음 창으로 넘어간다.
+                // 소비해야 대상 앱에 백틱이 입력되지 않는다(도크가 떠 있는 동안에만 가로챈다).
+                if (vk == NativeMethods.VK_OEM_3)
+                {
+                    Raise(FolderCycleRequested);
                     return (IntPtr)1;
                 }
                 // 그 외 키: 수식키가 아니면 오토클로즈 요청(키는 소비하지 않고 대상 앱에 전달 — CM 동일)

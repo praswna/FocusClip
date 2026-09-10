@@ -247,6 +247,7 @@ public partial class App : Application
         _hotkey.HotkeyPressed += () => Dispatcher.BeginInvoke(ToggleOverlay);
         _hotkey.NumberPressed += n => Dispatcher.BeginInvoke(() => ActivatePinned(n));
         _hotkey.EscapePressed += () => Dispatcher.BeginInvoke(() => HideOverlay(force: true));
+        _hotkey.FolderCycleRequested += () => Dispatcher.BeginInvoke(CycleExplorerFolders);
         _hotkey.DismissRequested += () => Dispatcher.BeginInvoke(() => HideOverlay(force: false)); // 다른 키 → 오토클로즈
         _hotkey.Install();
     }
@@ -406,6 +407,15 @@ public partial class App : Application
             case DockRightClickAction.None:
                 break;
         }
+    }
+
+    /// <summary>` : 열린 탐색기 폴더 창을 하나씩 앞으로 올린다(없으면 윈도우 기본 위치로 새로 연다).
+    /// 앱 아이콘과 달리 도크를 닫지 않는다 — 연타로 계속 다음 창을 넘겨볼 수 있어야 하므로.
+    /// 도크는 Topmost·포커스 비탈취라 탐색기를 앞으로 올려도 그대로 떠 있다.</summary>
+    private void CycleExplorerFolders()
+    {
+        if (!WindowManager.FocusNextExplorerWindow())
+            WindowManager.OpenDefaultExplorer();
     }
 
     private void ActivatePinned(int n)

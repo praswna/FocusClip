@@ -17,6 +17,7 @@ internal static class NativeMethods
     public const int WM_SYSKEYUP = 0x0105;
 
     public const int VK_CAPITAL = 0x14; // CapsLock
+    public const int VK_OEM_3 = 0xC0;   // ` (백틱) — 도크 표시 중 탐색기 폴더 순환
 
     // 창 확장 스타일 (포커스 비탈취 팝업)
     public const int GWL_EXSTYLE = -20;
@@ -147,6 +148,11 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    /// <summary>창 클래스명. 탐색기 폴더 창(CabinetWClass)을 같은 explorer.exe 소유의
+    /// 바탕화면(Progman)·작업표시줄과 구분하는 데 쓴다.</summary>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetWindowTextLength(IntPtr hWnd);
