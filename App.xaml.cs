@@ -460,20 +460,34 @@ public partial class App : Application
     /// <summary>핀 상태로 떠 있는 팝업이 하나라도 있는지(모달 종료 후 오버레이 복구 판단용).</summary>
     private bool AnyPinnedPopupVisible() => (_popup?.IsVisible ?? false) && PopupPinned;
 
+    /// <summary>모달 편집창을 확실히 맨 앞으로 올린다. 도크·팝업이 포커스를 뺏지 않는(no-activate) 창이라
+    /// Activate() 만으로는 포그라운드 잠금에 막혀 편집창이 다른 앱 뒤에서 열릴 수 있다 — 그러면 모달이라
+    /// 화면상 '버튼이 안 먹는' 것처럼 보인다. 설정 창과 같은 방식으로 우회한다.</summary>
+    private static void BringToFront(Window w)
+    {
+        w.Activate();
+        var h = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+        if (h != IntPtr.Zero) NativeMethods.ForceForeground(h);
+        w.Topmost = false;
+    }
+
     /// <summary>프롬프트 편집 모달 공통 진입로(추가/편집/승격). 오토클로즈 정지 → 오버레이 강제 숨김 →
-    /// Topmost 댄스(Topmost 오버레이가 편집창을 가리지 않게 잠깐 위로 올렸다 해제)로 편집창 표시 →
-    /// 저장 시 onSave. 종료 후 핀 팝업이 있었으면 오버레이 복구, 아니면 폴 재개(OnClipEdit과 동일 규칙).</summary>
+    /// 편집창을 맨 앞으로 올려 표시 → 저장 시 onSave.
+    /// 종료 후 핀 팝업이 있었으면 오버레이 복구, 아니면 폴 재개(OnClipEdit과 동일 규칙).</summary>
     private void ShowPromptDialog(string title, string text, Action<string, string> onSave)
     {
         if (_editDialogOpen) return; // 더블클릭으로 큐잉된 중복 호출 무시
         _editDialogOpen = true;
-        bool wasPinned = AnyPinnedPopupVisible(); // 모달 종료 후 복구 대상
-        _outsidePoll?.Stop();          // 모달 편집기 동안 오토클로즈 정지
-        HideOverlay(force: true);      // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
+        bool wasPinned = false; // 모달 종료 후 복구 대상
+        // 여는 준비까지 try 안에서 — 예외가 새면 _editDialogOpen 이 굳어 이후 편집이 영영 먹통이 된다.
         try
         {
+            wasPinned = AnyPinnedPopupVisible();
+            _outsidePoll?.Stop();      // 모달 편집기 동안 오토클로즈 정지
+            HideOverlay(force: true);  // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
+
             var dlg = new PromptEditWindow(title, text) { Topmost = true };
-            dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
+            dlg.Loaded += (_, _) => BringToFront(dlg);
             if (dlg.ShowDialog() == true)
                 onSave(dlg.ResultTitle, dlg.ResultText);
         }
@@ -544,24 +558,29 @@ public partial class App : Application
     {
         if (_editDialogOpen) return; // 더블클릭으로 큐잉된 중복 호출 무시
         _editDialogOpen = true;
-        bool wasPinned = AnyPinnedPopupVisible(); // 클립뿐 아니라 경로·프롬프트 핀 팝업도 복구 대상
-        _outsidePoll?.Stop(); // 모달 편집기 동안 오토클로즈 정지
-        HideOverlay(force: true); // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
+        bool wasPinned = false; // 모달 종료 후 복구 대상(클립뿐 아니라 경로·프롬프트 핀 팝업도)
+        // 여는 준비까지 try 안에서 한다 — 여기서 예외가 새면 _editDialogOpen 이 true 로 굳어
+        // 이후 수정 버튼이 영영 먹통이 된다.
         try
         {
+            wasPinned = AnyPinnedPopupVisible();
+            _outsidePoll?.Stop();      // 모달 편집기 동안 오토클로즈 정지
+            HideOverlay(force: true);  // 팝업/도크는 Topmost라 안 닫으면 편집기가 그 뒤로 깔림
+
             if (item.IsImage)
             {
                 var src = ClipboardService.LoadImage(item);
-                if (src == null) return;
+                // 본문 PNG 는 수동 삭제될 수 있다. 조용히 돌아가면 '버튼이 안 먹는' 것처럼 보이므로 알린다.
+                if (src == null) { _toast?.ShowToast("원본 이미지를 찾을 수 없음"); return; }
                 var dlg = new ImageAnnotateWindow(src) { Topmost = true };
-                dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
+                dlg.Loaded += (_, _) => BringToFront(dlg);
                 if (dlg.ShowDialog() == true && dlg.Result != null)
                     _clipboard.AddEditedImage(dlg.Result); // CM: 이미지 편집은 항상 새 클립
             }
             else
             {
                 var dlg = new TextEditWindow(item.Text) { Topmost = true };
-                dlg.Loaded += (_, _) => { dlg.Activate(); dlg.Topmost = false; };
+                dlg.Loaded += (_, _) => BringToFront(dlg);
                 if (dlg.ShowDialog() == true)
                 {
                     if (dlg.SaveMode == TextEditWindow.Mode.New)
