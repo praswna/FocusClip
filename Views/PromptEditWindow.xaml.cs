@@ -30,8 +30,10 @@ public partial class PromptEditWindow : Window
         };
     }
 
+    // 휠은 스크롤(TextBox 기본 동작에 맡긴다), Ctrl+휠일 때만 글자 크기 ±.
     private void Body_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
         e.Handled = true;
         double size = BodyBox.FontSize + (e.Delta > 0 ? 1 : -1);
         BodyBox.FontSize = Math.Max(8, Math.Min(48, size));

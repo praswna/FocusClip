@@ -23,7 +23,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="휠로 글자 크기 조절" Foreground="{StaticResource GrayBrush}"
+        <TextBlock Grid.Row="0" Text="Ctrl+휠로 글자 크기 조절" Foreground="{StaticResource GrayBrush}"
                    FontSize="11" Margin="2,0,0,6"/>
 
         <TextBox x:Name="Editor" Grid.Row="1"

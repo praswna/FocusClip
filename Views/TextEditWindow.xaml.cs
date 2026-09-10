@@ -5,7 +5,7 @@ using System.Windows.Input;
 
 namespace FocusClip.Views;
 
-/// <summary>클립 텍스트 편집기(C4). 휠로 글자 크기 조절, 덮어쓰기/새 클립 저장. (CM TextEditDialog/ZoomTextEdit 대응)</summary>
+/// <summary>클립 텍스트 편집기(C4). 휠은 스크롤·Ctrl+휠로 글자 크기 조절, 덮어쓰기/새 클립 저장. (CM TextEditDialog 대응)</summary>
 public partial class TextEditWindow : Window
 {
     public enum Mode { Overwrite, New }
@@ -24,9 +24,10 @@ public partial class TextEditWindow : Window
         PreviewKeyDown += Window_PreviewKeyDown;
     }
 
-    // CM ZoomTextEdit: 그냥 휠로 폰트 크기 ±
+    // 휠은 스크롤(TextBox 기본 동작에 맡긴다), Ctrl+휠일 때만 글자 크기 ±.
     private void Editor_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
         e.Handled = true;
         double size = Editor.FontSize + (e.Delta > 0 ? 1 : -1);
         Editor.FontSize = Math.Max(8, Math.Min(48, size));
