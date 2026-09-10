@@ -33,11 +33,7 @@ public partial class App : Application
     private LauncherDock? _dock;
     private Sidebar? _sidebar;
     private SettingsWindow? _settings;
-    private ClipboardPopup? _clipPopup;
-    private PathPopup? _pathPopup;
-    private PromptPopup? _promptPopup;
-    private PinnedPopup? _clipPinPopup;   // 고정한 클립만 모아 관리(클립 팝업 오른쪽)
-    private PinnedPopup? _pathPinPopup;   // 고정한 경로만 모아 관리(경로 팝업 오른쪽)
+    private MainPopup? _popup;            // 클립·경로·프롬프트를 탭으로 묶은 단일 팝업
     private Toast? _toast;
     private DispatcherTimer? _refreshTimer;
     private DispatcherTimer? _outsidePoll;   // 오토클로즈: 외부 클릭 감지
@@ -177,90 +173,48 @@ public partial class App : Application
             if (item.IsImage) _toast?.ShowToast(item.Thumb);            // 썸네일 미리보기
             else _toast?.ShowToast(item.IsPath ? item.PathName : item.Snippet);
         });
-        _clipPopup = new ClipboardPopup();
-        _clipPopup.SetItems(_clipboard.Items);
-        _clipPopup.ClipSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
-        _clipPopup.ClipDeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
-        _clipPopup.ClipPinToggled += item => Dispatcher.BeginInvoke(() => OnPinToggled(item));
-        _clipPopup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
-        _clipPopup.ClipOpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
-        _clipPopup.ClipPromoteRequested += item => Dispatcher.BeginInvoke(() => OnClipPromote(item));
-        _clipPopup.OpenFolderRequested += () => Dispatcher.BeginInvoke(OpenSaveFolder);
-        _clipPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_clipPopup));
-        _clipPopup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
-        _clipPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
-
-        _pathPopup = new PathPopup();
-        _pathPopup.SetItems(_clipboard.Paths);
-        _pathPopup.PathSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
-        _pathPopup.PathDeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
-        _pathPopup.PathOpenRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
-        _pathPopup.PathPinToggled += item => Dispatcher.BeginInvoke(() => OnPinToggled(item));
-        _pathPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_pathPopup));
-        _pathPopup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
-        _pathPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
-
-        // 보관(★) 항목 전용 압축 팝업 — 클립·경로 각각 하나씩, 기본 팝업 오른쪽에 뜬다.
-        // 기본 팝업은 미고정 항목만 보여주므로 큼직한 고정 카드가 최근 목록을 밀어내지 않는다.
-        _clipPinPopup = NewPinPopup("고정 클립", _clipboard.Items);
-        _clipPinPopup.EditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
-        _clipPinPopup.PromoteRequested += item => Dispatcher.BeginInvoke(() => OnClipPromote(item));
-        _clipPinPopup.OpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
-
-        _pathPinPopup = NewPinPopup("고정 경로", _clipboard.Paths);
-        _pathPinPopup.OpenRequested += item => Dispatcher.BeginInvoke(() => OnPathOpen(item));
-        _pathPinPopup.PathPrimaryRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
-
         _prompts.Load(); // 프롬프트 보관함 복원(전량 영구 저장)
-        _promptPopup = new PromptPopup();
-        _promptPopup.SetItems(_prompts.Prompts);
-        _promptPopup.PromptSelected += p => Dispatcher.BeginInvoke(() => OnPromptSelected(p));
-        _promptPopup.PromptAddRequested += () => Dispatcher.BeginInvoke(OnPromptAdd);
-        _promptPopup.PromptEditRequested += p => Dispatcher.BeginInvoke(() => OnPromptEdit(p));
-        _promptPopup.PromptDeleteRequested += p => Dispatcher.BeginInvoke(() => OnPromptRemove(p));
-        _promptPopup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(_promptPopup));
-        _promptPopup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
-        _promptPopup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱"));
+
+        // 클립·경로·프롬프트를 탭으로 묶은 단일 팝업. 고정(★)한 항목은 각 탭 목록 맨 위에 압축 카드로 나온다.
+        _popup = new MainPopup();
+        _popup.SetItems(_clipboard.Items, _clipboard.Paths, _prompts.Prompts);
+        _popup.ClipSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
+        _popup.ClipEditRequested += item => Dispatcher.BeginInvoke(() => OnClipEdit(item));
+        _popup.ClipPromoteRequested += item => Dispatcher.BeginInvoke(() => OnClipPromote(item));
+        _popup.ClipOpenRequested += item => Dispatcher.BeginInvoke(() => OnClipOpen(item));
+        _popup.PathPrimaryRequested += item => Dispatcher.BeginInvoke(() => OnPathPrimary(item));
+        _popup.PinToggleRequested += item => Dispatcher.BeginInvoke(() => OnPinToggled(item));
+        _popup.ItemDeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
+        _popup.PromptSelected += p => Dispatcher.BeginInvoke(() => OnPromptSelected(p));
+        _popup.PromptEditRequested += p => Dispatcher.BeginInvoke(() => OnPromptEdit(p));
+        _popup.PromptDeleteRequested += p => Dispatcher.BeginInvoke(() => OnPromptRemove(p));
+        _popup.PromptAddRequested += () => Dispatcher.BeginInvoke(OnPromptAdd);
+        _popup.OpenFolderRequested += () => Dispatcher.BeginInvoke(OpenSaveFolder);
+        _popup.PinChanged += () => Dispatcher.BeginInvoke(OnPopupPinChanged);
+        _popup.CollapseChanged += () => Dispatcher.BeginInvoke(LayoutPopups); // 높이가 바뀌었으니 다시 배치
+        _popup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
     }
 
-    /// <summary>고정 팝업 하나 생성 + 공통 배선(선택·고정 해제·삭제·팝업 핀·드래그 실패).
-    /// 열기(📂/↗)·편집처럼 클립과 경로가 다른 동작은 호출한 쪽에서 따로 붙인다.</summary>
-    private PinnedPopup NewPinPopup(string header, IEnumerable<ClipItem> source)
-    {
-        var popup = new PinnedPopup { Header = header };
-        popup.SetItems(source);
-        popup.ItemSelected += item => Dispatcher.BeginInvoke(() => OnClipSelected(item));
-        popup.UnpinRequested += item => Dispatcher.BeginInvoke(() => OnPinToggled(item));
-        popup.DeleteRequested += item => Dispatcher.BeginInvoke(() => OnClipRemove(item));
-        popup.PinChanged += () => Dispatcher.BeginInvoke(() => OnPopupPinChanged(popup));
-        popup.CollapseChanged += () => Dispatcher.BeginInvoke(RelayoutPopups);
-        popup.DragFailed += () => Dispatcher.BeginInvoke(() => _toast?.ShowToast("드롭 미지원 앱")); // P001
-        return popup;
-    }
-
-    // ── 카드 고정/삭제: 항목이 기본 팝업과 고정 팝업 사이를 오가므로 재필터 + 재배치가 함께 필요하다 ──
-    /// <summary>카드 핀 토글 → 네 팝업의 목록을 다시 거르고 배치를 갱신한다.</summary>
+    // ── 카드 고정/삭제: 항목이 고정 카드와 일반 목록 사이를 오가므로 재필터가 필요하다 ──
+    /// <summary>카드 보관(★) 토글 → 탭 목록을 다시 거른다.</summary>
     private void OnPinToggled(ClipItem item)
     {
         _clipboard.TogglePin(item);
-        RefreshPopupLists();
-        RelayoutPopups();
+        _popup?.RefreshItems();
     }
 
-    /// <summary>카드 삭제(목록에서만 제거 — 본문 파일은 보존) → 목록·배치 갱신.</summary>
+    /// <summary>카드 삭제(목록에서만 제거 — 본문 파일은 보존) → 목록 갱신.</summary>
     private void OnClipRemove(ClipItem item)
     {
         int index = _clipboard.RemoveForUndo(item);
         if (index < 0) return;
-        RefreshPopupLists();
-        RelayoutPopups();
+        _popup?.RefreshItems();
         string label = item.IsImage ? "이미지" : item.IsPath ? item.PathName : item.Snippet;
         _toast?.ShowUndo(label,
             undo: () =>
             {
                 _clipboard.RestoreRemoved(item, index);
-                RefreshPopupLists();
-                RelayoutPopups();
+                _popup?.RefreshItems();
             },
             commit: () => ClipboardService.FinalizeRemove(item));
     }
@@ -269,62 +223,19 @@ public partial class App : Application
     {
         int index = _prompts.RemoveForUndo(item);
         if (index < 0) return;
-        RelayoutPopups();
         _toast?.ShowUndo(item.DisplayTitle,
-            undo: () => { _prompts.RestoreRemoved(item, index); RelayoutPopups(); },
+            undo: () => _prompts.RestoreRemoved(item, index),
             commit: () => { });
     }
 
-    /// <summary>항목의 Pinned 변경은 컬렉션 변경이 아니라 뷰가 스스로 알아채지 못하므로, 네 팝업의 필터를 다시 돌린다.</summary>
-    private void RefreshPopupLists()
-    {
-        _clipPopup?.RefreshItems();
-        _pathPopup?.RefreshItems();
-        _clipPinPopup?.RefreshItems();
-        _pathPinPopup?.RefreshItems();
-    }
-
-    /// <summary>목록 변화로 팝업 높이가 바뀐 뒤 배치를 다시 계산한다. 레이아웃(측정) 패스가 끝난 뒤 돌도록
-    /// Background 우선순위로 미룬다 — 그래야 ActualHeight 가 새 높이를 가리킨다.</summary>
-    private void RelayoutPopups()
-    {
-        if (_dock?.IsVisible ?? false)
-        {
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(LayoutPopups));
-            return;
-        }
-        // 도크 없이 핀으로만 떠 있는 팝업이 비었으면 닫는다(내용 없는 빈 창이 남지 않게).
-        if (!_clipboard.Items.Any(c => !c.Pinned)) _clipPopup?.Hide();
-        if (!_clipboard.Items.Any(c => c.Pinned)) _clipPinPopup?.Hide();
-        if (!_clipboard.Paths.Any(c => !c.Pinned)) _pathPopup?.Hide();
-        if (!_clipboard.Paths.Any(c => c.Pinned)) _pathPinPopup?.Hide();
-    }
-
-    /// <summary>도크 주변 팝업 전부(핀 상태·표시 판정을 한 곳에서 다루기 위한 목록).</summary>
-    private IEnumerable<Window> Popups()
-    {
-        if (_clipPopup != null) yield return _clipPopup;
-        if (_clipPinPopup != null) yield return _clipPinPopup;
-        if (_pathPopup != null) yield return _pathPopup;
-        if (_pathPinPopup != null) yield return _pathPinPopup;
-        if (_promptPopup != null) yield return _promptPopup;
-    }
-
     /// <summary>팝업 헤더의 고정핀(📌) 상태 — 켜져 있으면 오토클로즈/CapsLock 에도 닫지 않는다.</summary>
-    private static bool IsPopupPinned(Window w) => w switch
-    {
-        ClipboardPopup cp => cp.Pinned,
-        PathPopup pp => pp.Pinned,
-        PromptPopup pr => pr.Pinned,
-        PinnedPopup pn => pn.Pinned,
-        _ => false,
-    };
+    private bool PopupPinned => _popup?.Pinned ?? false;
 
-    /// <summary>핀 해제 시: 도크가 숨겨진 '단독 핀 팝업'이라면 닫는다(CapsLock 으로 안 닫히므로 핀 해제가 닫는 수단).</summary>
-    private void OnPopupPinChanged(Window? popup)
+    /// <summary>핀 해제 시: 도크가 숨겨진 채 핀으로만 떠 있던 팝업이라면 닫는다
+    /// (CapsLock 으로 안 닫히므로 핀 해제가 닫는 수단).</summary>
+    private void OnPopupPinChanged()
     {
-        if (popup == null) return;
-        if (!IsPopupPinned(popup) && !(_dock?.IsVisible ?? false)) popup.Hide();
+        if (!PopupPinned && !(_dock?.IsVisible ?? false)) _popup?.Hide();
     }
 
     /// <summary>현재 CapsLock 토글 상태(켜짐=대문자).</summary>
@@ -410,78 +321,21 @@ public partial class App : Application
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
     }
 
-    /// <summary>도크 주변 팝업 배치. 왼쪽 열은 클립(도크 위)·도크·경로(도크 아래), 그 오른쪽 열이 각 고정 팝업,
-    /// 다시 그 오른쪽이 프롬프트. 보여줄 항목이 없는 팝업은 감춘다.
-    /// 고정(📌)한 항목은 기본 팝업에서 빠지고 압축 카드로 고정 팝업에만 나온다(큰 고정 카드가 최근 목록을 밀어내지 않게).</summary>
+    /// <summary>팝업을 도크 바로 위에 배치한다. 창이 하나뿐이고 높이도 고정이라 늘 같은 자리에 뜬다
+    /// (예전에는 목록마다 창이 따로 떠서 내용에 따라 배치가 흔들렸다).</summary>
     private void LayoutPopups()
     {
         var dock = _dock;
-        var clipPopup = _clipPopup;
-        var pathPopup = _pathPopup;
-        if (dock == null || clipPopup == null || pathPopup == null || !dock.IsVisible) return;
-
-        bool clips = _clipboard.Items.Any(c => !c.Pinned);
-        bool pinnedClips = _clipboard.Items.Any(c => c.Pinned);
-        bool paths = _clipboard.Paths.Any(c => !c.Pinned);
-        bool pinnedPaths = _clipboard.Paths.Any(c => c.Pinned);
-
-        if (clips) clipPopup.ShowAbove(dock);   // 미고정 클립이 있을 때만 도크 위에
-        else clipPopup.Hide();
-
-        if (paths || pinnedPaths)
-            _clipboard.RefreshPathExistsAll();  // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
-        if (paths) pathPopup.ShowBelow(dock, clipPopup.IsVisible ? clipPopup : null); // 도크 아래
-        else pathPopup.Hide();
-
-        // 오른쪽 열은 '클립/경로 팝업이 놓이는 자리' 기준으로 잡는다. 창이 아니라 자리를 기준으로 삼아야
-        // 클립·경로가 비어도 고정 팝업이 도크 옆으로 내려오지 않고 같은 세로 위치를 지키고,
-        // 가로로는 빈 자리(폭 0) 덕에 도크 왼쪽에 정렬됐다가 기본 팝업이 생기면 그만큼 오른쪽으로 밀린다.
-        Rect clipSlot = PopupSlot(clipPopup, dock, above: true);
-        Rect pathSlot = PopupSlot(pathPopup, dock, above: false);
-        // 클립 자리가 도크 위(기본 위치)면 오른쪽 열은 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
-        bool alignBottom = clipSlot.Top < dock.Top;
-
-        // 고정 클립: 클립 팝업 자리 오른쪽.
-        if (pinnedClips) _clipPinPopup?.ShowRightOf(clipSlot, dock, alignBottom);
-        else _clipPinPopup?.Hide();
-
-        // 고정 경로: 경로 팝업 자리 오른쪽. 같은 열의 고정 클립 팝업과 세로로 겹치면 비켜 쌓는다.
-        if (pinnedPaths) _pathPinPopup?.ShowRightOf(pathSlot, dock, false, _clipPinPopup);
-        else _pathPinPopup?.Hide();
-
-        // 프롬프트: 경로·고정 팝업들의 오른쪽 끝 바깥. 비어 있으면 표시 안 함
-        // — 첫 프롬프트는 클립 카드의 🔖(프롬프트로 저장) 또는 트레이 「프롬프트 추가」로 만든다.
-        if (_prompts.Prompts.Count > 0)
-            _promptPopup?.ShowRightOf(clipSlot, dock, alignBottom, pathPopup, _clipPinPopup, _pathPinPopup);
-        else _promptPopup?.Hide();
-
-        // 각 창의 기본 위치를 정한 뒤 화면 끝에서 생긴 충돌을 순차적으로 해소한다.
-        // 사용자가 직접 핀으로 옮긴 팝업은 고정 장애물로 취급해 위치를 보존한다.
-        PopupPlacement.ResolveOverlaps(dock, Popups().Where(IsPopupPinned),
-            clipPopup, pathPopup, _clipPinPopup, _pathPinPopup, _promptPopup);
-    }
-
-    /// <summary>클립·경로 팝업이 차지하는 자리. 오른쪽 열(고정·프롬프트 팝업)이 이 자리를 기준으로 놓인다.
-    /// 항목이 없어 떠 있지 않으면 폭 0의 빈 자리를 돌려준다 — 오른쪽 열이 도크 왼쪽 끝에 그대로 정렬되고,
-    /// 나중에 클립·경로가 생겨 기본 팝업이 뜨면 그 폭만큼 오른쪽으로 밀려난다.
-    /// 세로 위치는 팝업 유무와 무관하게 고정 — 위 슬롯은 도크 윗변에서 6px 위(아래 모서리 기준),
-    /// 아래 슬롯은 도크 아랫변에서 6px 아래(위 모서리 기준).</summary>
-    private static Rect PopupSlot(Window popup, Window dock, bool above)
-    {
-        if (popup.IsVisible) return PopupPlacement.RectOf(popup);
-        double top = above
-            ? dock.Top - PopupPlacement.Gap                      // 위 슬롯: 아래 모서리가 도크 윗변에서 6px
-            : dock.Top + dock.ActualHeight + PopupPlacement.Gap; // 아래 슬롯: 위 모서리가 도크 아랫변에서 6px
-        // 오른쪽 끝을 '도크 왼쪽 - 간격'에 두면 뒤이은 (오른쪽 끝 + 간격) 계산이 정확히 도크 왼쪽에 맞는다.
-        return new Rect(dock.Left - PopupPlacement.Gap, top, 0, 0);
+        if (dock == null || _popup == null || !dock.IsVisible) return;
+        _clipboard.RefreshPathExistsAll(); // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
+        _popup.ShowAboveDock(dock);
     }
 
     /// <summary>오버레이 숨김. force=true(CapsLock·Esc)면 팝업 핀도 무시하고 닫는다(C1).</summary>
     private void HideOverlay(bool force = false)
     {
         _dock?.Hide();
-        foreach (var p in Popups())
-            if (force || !IsPopupPinned(p)) p.Hide();
+        if (force || !PopupPinned) _popup?.Hide();
         if (_hotkey != null) _hotkey.CaptureExtraKeys = false;
         _outsidePoll?.Stop();
     }
@@ -492,8 +346,9 @@ public partial class App : Application
         try
         {
             bool dockVisible = _dock?.IsVisible ?? false;
-            // 닫을 대상은 도크 + 핀이 안 걸린 채 떠 있는 팝업들. 둘 다 없으면 폴링을 멈춘다.
-            if (!dockVisible && !Popups().Any(p => p.IsVisible && !IsPopupPinned(p))) { _outsidePoll?.Stop(); return; }
+            bool popupOpen = (_popup?.IsVisible ?? false) && !PopupPinned;
+            // 닫을 대상은 도크 + 핀이 안 걸린 채 떠 있는 팝업. 둘 다 없으면 폴링을 멈춘다.
+            if (!dockVisible && !popupOpen) { _outsidePoll?.Stop(); return; }
             if ((DateTime.Now - _overlayShownAt).TotalMilliseconds < 200) return;            // 표시 직후 유예
 
             bool clicked = (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0
@@ -501,9 +356,9 @@ public partial class App : Application
             if (!clicked) return;
 
             bool outsideDock = !dockVisible || _dock == null || CursorOutside(_dock);
-            bool outsidePopups = Popups().All(p => !p.IsVisible || CursorOutside(p));
+            bool outsidePopup = _popup == null || !_popup.IsVisible || CursorOutside(_popup);
             // 대소문자 버튼은 도크 안에 있으므로 outsideDock 판정에 이미 포함된다.
-            if (outsideDock && outsidePopups) HideOverlay(force: false);
+            if (outsideDock && outsidePopup) HideOverlay(force: false);
         }
         catch { /* 30ms 타이머는 절대 앱을 죽이지 않게 */ }
     }
@@ -512,7 +367,7 @@ public partial class App : Application
     {
         if (_outsidePoll == null) return;
         bool need = (_dock?.IsVisible ?? false)
-                 || Popups().Any(p => p.IsVisible && !IsPopupPinned(p));
+                 || ((_popup?.IsVisible ?? false) && !PopupPinned);
         if (need) { _overlayShownAt = DateTime.Now; _outsidePoll.Start(); }
     }
 
@@ -603,7 +458,7 @@ public partial class App : Application
 
     // ── 프롬프트 추가/편집(모달 편집창) ──
     /// <summary>핀 상태로 떠 있는 팝업이 하나라도 있는지(모달 종료 후 오버레이 복구 판단용).</summary>
-    private bool AnyPinnedPopupVisible() => Popups().Any(p => p.IsVisible && IsPopupPinned(p));
+    private bool AnyPinnedPopupVisible() => (_popup?.IsVisible ?? false) && PopupPinned;
 
     /// <summary>프롬프트 편집 모달 공통 진입로(추가/편집/승격). 오토클로즈 정지 → 오버레이 강제 숨김 →
     /// Topmost 댄스(Topmost 오버레이가 편집창을 가리지 않게 잠깐 위로 올렸다 해제)로 편집창 표시 →
