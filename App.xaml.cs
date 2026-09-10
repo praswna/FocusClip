@@ -327,7 +327,9 @@ public partial class App : Application
     {
         var dock = _dock;
         if (dock == null || _popup == null || !dock.IsVisible) return;
-        _clipboard.RefreshPathExistsAll(); // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
+        // 표시 직전 백그라운드 재검사(세션 중 수동 삭제 반영) — 경로 존재 여부, 클립 본문 크기·유실 여부.
+        _clipboard.RefreshPathExistsAll();
+        _clipboard.RefreshBodyStateAll();
         _popup.ShowAboveDock(dock);
     }
 

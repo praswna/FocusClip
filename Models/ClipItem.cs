@@ -23,6 +23,7 @@ public class ClipItem : INotifyPropertyChanged
             _text = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(Snippet));
+            OnPropertyChanged(nameof(SizeLabel)); // 글자 수 표시(편집으로 본문 길이가 바뀌는 경우)
             OnPropertyChanged(nameof(PinTitle));   // 고정 팝업 압축 카드도 함께 갱신(편집으로 본문이 바뀌는 경우)
             OnPropertyChanged(nameof(PinSubtitle));
         }
@@ -65,8 +66,53 @@ public class ClipItem : INotifyPropertyChanged
     /// 완전 수동(파일 보존)이라 어디서도 true로 설정하지 않으며, 안전 훅으로만 남겨 둔다.</summary>
     public volatile bool Removed;
 
-    public string TimeLabel => Time.ToString("yyyy-MM-dd HH:mm:ss");
+    public string TimeLabel => Time.ToString("yyyy MM-dd HH:mm:ss");
     public string Snippet => IsImage ? "" : (Text.Length > 300 ? Text[..300] : Text);
+
+    private string _sizeLabel = "";
+    /// <summary>카드 하단의 크기 표시 — 텍스트·경로는 글자 수, 이미지는 본문 용량.
+    /// 미리보기가 300자에서 잘려 한 줄짜리인지 문서 통째인지 구분이 안 되므로 곁들인다.
+    /// 이미지는 파일을 두드려야 알 수 있어 <see cref="ReadBodyState"/> 결과로 채운다.</summary>
+    public string SizeLabel
+    {
+        // 텍스트는 세는 게 공짜라 검사 전에도 바로 보여준다(방금 복사한 카드가 빈칸으로 남지 않게).
+        get => _sizeLabel.Length == 0 && !IsImage ? $"{Text.Length:N0}자" : _sizeLabel;
+        set { _sizeLabel = value; OnPropertyChanged(); }
+    }
+
+    private bool _bodyMissing;
+    /// <summary>저장해 둔 본문 파일이 사라졌는지(본문 삭제는 완전 수동이라 생길 수 있다).
+    /// 메모리에 본문이 남아 있으면 파일이 없어도 쓸 수 있으므로 false.</summary>
+    public bool BodyMissing
+    {
+        get => _bodyMissing;
+        set { _bodyMissing = value; OnPropertyChanged(); }
+    }
+
+    /// <summary>본문 파일을 살펴 (크기 표시, 유실 여부)를 계산한다.
+    /// 디스크를 두드리므로 백그라운드에서 부르고, 결과 대입은 UI 스레드에서 한다.</summary>
+    public (string Size, bool Missing) ReadBodyState()
+    {
+        // 텍스트·경로는 본문이 메모리에 있으므로 글자 수만 세면 된다.
+        if (!IsImage) return ($"{Text.Length:N0}자", false);
+
+        long bytes = ImageBytes?.Length ?? 0; // 미고정 이미지는 PNG 가 메모리에 있어 디스크를 안 봐도 된다
+        bool missing = false;
+        if (bytes == 0 && !string.IsNullOrEmpty(FilePath))
+        {
+            try
+            {
+                var info = new System.IO.FileInfo(FilePath);
+                if (info.Exists) bytes = info.Length;
+                else missing = true;
+            }
+            catch { }
+        }
+        return (bytes > 0 ? FormatBytes(bytes) : "", missing);
+    }
+
+    private static string FormatBytes(long n)
+        => n >= 1024 * 1024 ? $"{n / 1024d / 1024d:0.#}MB" : $"{Math.Max(1, n / 1024)}KB";
 
     // ── 고정(핀) 팝업 압축 카드 표시 ──
     /// <summary>압축 카드의 주 텍스트 — 경로=파일·폴더명, 이미지=라벨, 텍스트=한 줄로 접은 요약.</summary>

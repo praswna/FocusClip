@@ -425,8 +425,30 @@
                         </StackPanel>
                     </Border>
 
-                    <TextBlock Grid.Row="1" Text="{Binding TimeLabel}" Foreground="{StaticResource GrayBrush}"
-                               FontSize="10" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                    <!-- 아랫줄: 왼쪽에 크기(텍스트=글자 수, 이미지=용량)와 본문 유실 배지, 오른쪽에 복사 시각 -->
+                    <Grid Grid.Row="1" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding SizeLabel}" Foreground="{StaticResource GrayBrush}"
+                                       FontSize="10" VerticalAlignment="Center"/>
+                            <Border CornerRadius="3" Padding="4,0" Margin="6,0,0,0" Background="#66FF3B30">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <!-- 본문 파일이 수동 삭제된 카드 — 왜 비어 보이는지 알 수 있게 -->
+                                            <DataTrigger Binding="{Binding BodyMissing}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock Text="원본 없음" Foreground="White" FontSize="9"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="{Binding TimeLabel}" Foreground="{StaticResource GrayBrush}"
+                                   FontSize="10" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Grid>
                 </Grid>
             </Border>
         </DataTemplate>

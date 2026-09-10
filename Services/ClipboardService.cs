@@ -58,6 +58,8 @@ public sealed class ClipboardService : IDisposable
     private readonly Task _imageWorker;
     private int _pathRefreshRunning;
     private DateTime _lastPathRefresh = DateTime.MinValue;
+    private int _bodyRefreshRunning;
+    private DateTime _lastBodyRefresh = DateTime.MinValue;
     private readonly object _screenshotLock = new();
     private readonly List<ScreenshotCandidate> _recentScreenshots = new();
     private FileSystemWatcher? _screenshotWatcher;
@@ -229,6 +231,33 @@ public sealed class ClipboardService : IDisposable
                 });
             }
             finally { Interlocked.Exchange(ref _pathRefreshRunning, 0); }
+        });
+    }
+
+    /// <summary>모든 클립의 본문 크기·유실 여부를 백그라운드로 재검사(팝업 표시 직전 호출).
+    /// 이미지는 파일을 stat 해야 하므로 경로 검사와 같은 방식으로 UI 스레드를 비켜 간다.</summary>
+    public void RefreshBodyStateAll()
+    {
+        if ((DateTime.UtcNow - _lastBodyRefresh).TotalSeconds < 2) return;
+        if (Interlocked.Exchange(ref _bodyRefreshRunning, 1) != 0) return;
+        _lastBodyRefresh = DateTime.UtcNow;
+        var items = Items.ToList();
+        Task.Run(() =>
+        {
+            try
+            {
+                var results = items.Select(item => (item, state: item.ReadBodyState())).ToList();
+                System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    foreach (var (item, state) in results)
+                        if (Items.Contains(item))
+                        {
+                            item.SizeLabel = state.Size;
+                            item.BodyMissing = state.Missing;
+                        }
+                });
+            }
+            finally { Interlocked.Exchange(ref _bodyRefreshRunning, 0); }
         });
     }
 
