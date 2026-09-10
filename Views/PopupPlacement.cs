@@ -6,129 +6,114 @@ using FocusClip.Interop;
 
 namespace FocusClip.Views;
 
-/// <summary>도크 주변 팝업 배치 공통 계산. 프롬프트·고정(핀) 팝업이 같은 규칙으로 오른쪽 열에 쌓이도록
-/// 한 곳에 모았다(창마다 복사해 두면 규칙이 갈라진다).</summary>
+/// <summary>도크 주변 팝업을 고정 열 그리드에 배치한다. 0열은 도크 왼쪽에 맞추고, 1·2열은 (팝업 폭 + 간격)만큼
+/// 일정하게 떨어진다. 열 자리는 '어떤 팝업이 지금 떠 있는지'와 무관하므로, 클립·경로 목록이 비거나 차도
+/// 나머지 팝업이 좌우로 밀려다니지 않는다. 오른쪽 공간이 모자라면 그리드 전체가 한 번에 왼쪽으로 자라고,
+/// 그래도 넘치면 그리드를 통째로 밀어 넣는다 — 팝업이 제각각 빈 자리를 찾아 흩어지지 않게.</summary>
 internal static class PopupPlacement
 {
     /// <summary>팝업 사이 간격(px, DIP). 도크·팝업 배치가 전부 이 값을 쓴다.</summary>
-    public const double Gap = 6;
+    private const double Gap = 6;
 
-    /// <summary>창의 현재 위치·크기 사각형.</summary>
-    public static Rect RectOf(Window w) => new(w.Left, w.Top, w.ActualWidth, w.ActualHeight);
+    /// <summary>세로 구역. Above 는 아래 모서리를 도크 윗변에, Below 는 위 모서리를 도크 아랫변에 맞춘다.</summary>
+    public enum Band { Above, Below }
 
-    /// <summary>
-    /// <paramref name="win"/>을 <paramref name="anchor"/>(기준 창이 놓인/놓일 자리) 오른쪽에 배치한다.
-    /// 사각형을 받는 이유는, 기본 팝업이 비어서 안 떠 있어도 그 자리를 기준으로 삼기 위해서다
-    /// — 그래야 고정 팝업이 항상 같은 열·같은 높이에 뜬다.
-    /// <paramref name="alignBottom"/>이면 아래 모서리를 맞춰 위로 자라게 한다 — 도크 위에 뜬 클립 팝업 자리 옆에
-    /// 붙을 때 이 팝업이 더 길어도 도크·경로 팝업을 덮지 않는다.
-    /// <paramref name="pushAvoid"/>에 있는(보이는) 창들의 오른쪽 끝 바깥으로 비켜 놓고,
-    /// <paramref name="stackAvoid"/>와 세로로 겹치면 같은 열에서 위/아래로 비켜 쌓는다.
-    /// 오른쪽 공간이 부족하면 기준 자리들의 왼쪽으로 뒤집는다.
-    /// </summary>
-    /// <param name="monitorRef">작업영역(모니터)을 정할 기준 창 — 보통 도크.</param>
-    public static void PlaceRightOf(Window win, Rect anchor, Window monitorRef, bool alignBottom = false,
-                                    Window? stackAvoid = null, params Window?[] pushAvoid)
+    /// <summary>그리드 한 칸 — 몇 번째 열, 어느 구역. Window 가 null 이면 열 자리만 잡아 두고 배치는 건너뛴다
+    /// (팝업이 비었거나, 사용자가 핀으로 직접 옮겨 둔 경우). 열 개수는 이 칸 목록이 정하므로
+    /// 지금 몇 개가 떠 있든 그리드가 쓰는 폭은 늘 같다.</summary>
+    public readonly record struct Cell(Window? Window, int Column, Band Band);
+
+    /// <summary>보이는 팝업들을 도크 기준 고정 열 그리드에 배치한다.</summary>
+    public static void Layout(Window dock, IEnumerable<Cell> cells)
     {
-        var wa = ScreenUtil.WorkAreaDip(monitorRef); // 도크가 놓인 모니터 기준(멀티모니터)
+        var all = cells.ToList();
+        var placed = all.Where(c => c.Window is { IsVisible: true })
+                        .Select(c => (Win: c.Window!, Col: c.Column, Zone: c.Band))
+                        .ToList();
+        if (placed.Count == 0) return;
 
-        double rightEdge = anchor.Right; // 비켜야 할 오른쪽 끝
-        double leftEdge = anchor.Left;   // 왼쪽 뒤집기 기준
-        foreach (var a in pushAvoid)
+        var wa = ScreenUtil.WorkAreaDip(dock); // 도크가 놓인 모니터 기준(멀티모니터)
+        double dockBottom = dock.Top + dock.ActualHeight;
+
+        // 열 간격은 가장 넓은 팝업 기준 — 폭이 모두 같으면 열이 정확히 맞물리고, 달라도 겹치지 않는다.
+        double colWidth = placed.Max(p => Width(p.Win));
+        double step = colWidth + Gap;
+
+        // 자라는 방향은 그리드 전체가 한 번에, 그것도 '빈 열까지 포함한' 폭으로 정한다 — 팝업마다 따로 뒤집으면
+        // 배치가 제각각이 되고, 떠 있는 것만 세면 항목이 생길 때마다 방향이 뒤집혀 열이 통째로 옮겨 다닌다.
+        double dx = dock.Left + all.Max(c => c.Column) * step + colWidth > wa.Right ? -step : step;
+        // 화면 밖으로 나가는 만큼만 그리드를 통째로 민다(실제로 떠 있는 열 기준 — 공연히 도크에서 떼어놓지 않게).
+        double origin = FitOrigin(dock.Left, dx, placed.Max(p => p.Col), colWidth, wa);
+
+        // 세로도 구역마다 한 번씩만 정해, 같은 구역의 팝업이 모두 같은 기준선에 나란히 서게 한다.
+        double aboveHeight = BandHeight(placed, Band.Above);
+        double belowHeight = BandHeight(placed, Band.Below);
+        bool aboveFits = dock.Top - Gap - aboveHeight >= wa.Top;
+        bool belowFits = dockBottom + Gap + belowHeight <= wa.Bottom;
+
+        double aboveLine, belowLine; // 구역 기준선
+        bool aboveUp, belowUp;       // true면 기준선이 아래 모서리(위로 자람)
+        if (!aboveFits && belowFits)
         {
-            if (a == null || !a.IsVisible) continue;
-            rightEdge = Math.Max(rightEdge, a.Left + a.ActualWidth);
-            leftEdge = Math.Min(leftEdge, a.Left);
+            // 도크 위가 좁다 → 위 구역을 통째로 도크 아래로 내리고, 아래 구역은 그 밑에 붙인다.
+            aboveLine = dockBottom + Gap;
+            belowLine = aboveLine + (aboveHeight > 0 ? aboveHeight + Gap : 0);
+            aboveUp = belowUp = false;
+        }
+        else if (!belowFits && aboveFits)
+        {
+            // 도크 아래가 좁다 → 아래 구역을 통째로 도크 위로 올리고, 위 구역은 그 위에 붙인다.
+            belowLine = dock.Top - Gap;
+            aboveLine = belowLine - (belowHeight > 0 ? belowHeight + Gap : 0);
+            aboveUp = belowUp = true;
+        }
+        else
+        {
+            aboveLine = dock.Top - Gap;
+            belowLine = dockBottom + Gap;
+            aboveUp = true;
+            belowUp = false;
         }
 
-        double left = rightEdge + Gap;
-        // 오른쪽 공간이 부족하면 왼쪽으로 뒤집어 배치
-        if (left + win.ActualWidth > wa.Right)
-            left = leftEdge - win.ActualWidth - Gap;
-        win.Left = Math.Max(wa.Left, Math.Min(left, wa.Right - win.ActualWidth));
-
-        // 상단 정렬(기본) 또는 아래 모서리 정렬(위로 자람)
-        double top = alignBottom ? anchor.Bottom - win.ActualHeight : anchor.Top;
-
-        // 같은 열에 이미 놓인 창과 겹치면(도크가 화면 끝이라 팝업들이 한쪽으로 몰린 경우) 그 위/아래로 비켜 쌓는다.
-        if (stackAvoid != null && stackAvoid.IsVisible
-            && win.Left < stackAvoid.Left + stackAvoid.ActualWidth && win.Left + win.ActualWidth > stackAvoid.Left
-            && top < stackAvoid.Top + stackAvoid.ActualHeight && top + win.ActualHeight > stackAvoid.Top)
+        foreach (var (win, column, zone) in placed)
         {
-            top = top >= stackAvoid.Top
-                ? stackAvoid.Top + stackAvoid.ActualHeight + Gap  // 아래로
-                : stackAvoid.Top - win.ActualHeight - Gap;        // 위로
-        }
-        win.Top = Math.Max(wa.Top, Math.Min(top, wa.Bottom - win.ActualHeight));
-    }
-
-    /// <summary>
-    /// 개별 팝업 배치가 끝난 뒤 화면 경계에서 겹친 창을 순서대로 빈 자리로 옮긴다.
-    /// 사용자가 핀으로 직접 고정한 창은 fixedWindows로 받아 그 위치를 보존한다.
-    /// </summary>
-    public static void ResolveOverlaps(Window monitorRef, IEnumerable<Window> fixedWindows,
-                                       params Window?[] orderedWindows)
-    {
-        var wa = ScreenUtil.WorkAreaDip(monitorRef);
-        var fixedSet = fixedWindows.Where(w => w.IsVisible).ToHashSet();
-        var occupied = new List<Rect> { RectOf(monitorRef) };
-        occupied.AddRange(fixedSet.Select(RectOf));
-
-        foreach (var win in orderedWindows)
-        {
-            if (win == null || !win.IsVisible || fixedSet.Contains(win)) continue;
-            double width = Math.Min(wa.Width, win.ActualWidth > 0 ? win.ActualWidth : win.Width);
-            double height = Math.Min(wa.Height, win.ActualHeight > 0 ? win.ActualHeight : win.Height);
-            var desired = new Rect(
-                Math.Clamp(win.Left, wa.Left, wa.Right - width),
-                Math.Clamp(win.Top, wa.Top, wa.Bottom - height), width, height);
-            var placed = FindBestPosition(desired, wa, occupied);
-            win.Left = placed.Left;
-            win.Top = placed.Top;
-            occupied.Add(placed);
+            double line = zone == Band.Above ? aboveLine : belowLine;
+            bool up = zone == Band.Above ? aboveUp : belowUp;
+            double height = Height(win);
+            win.Left = Clamp(origin + column * dx, wa.Left, wa.Right - Width(win));
+            win.Top = Clamp(up ? line - height : line, wa.Top, wa.Bottom - height);
         }
     }
 
-    /// <summary>원래 위치에 가장 가까우면서 기존 사각형들과 Gap만큼 떨어진 위치를 찾는다.</summary>
-    internal static Rect FindBestPosition(Rect desired, Rect workArea, IReadOnlyList<Rect> occupied)
+    /// <summary>열이 전부 작업영역 안에 들어가도록 그리드 전체를 같은 양만큼 민다(열 간격은 그대로 유지).</summary>
+    private static double FitOrigin(double origin, double dx, int lastColumn, double colWidth, Rect wa)
     {
-        double maxX = Math.Max(workArea.Left, workArea.Right - desired.Width);
-        double maxY = Math.Max(workArea.Top, workArea.Bottom - desired.Height);
-        var xs = new HashSet<double> { Math.Clamp(desired.Left, workArea.Left, maxX), workArea.Left, maxX };
-        var ys = new HashSet<double> { Math.Clamp(desired.Top, workArea.Top, maxY), workArea.Top, maxY };
-        foreach (var r in occupied)
-        {
-            xs.Add(Math.Clamp(r.Left - desired.Width - Gap, workArea.Left, maxX));
-            xs.Add(Math.Clamp(r.Right + Gap, workArea.Left, maxX));
-            ys.Add(Math.Clamp(r.Top - desired.Height - Gap, workArea.Top, maxY));
-            ys.Add(Math.Clamp(r.Bottom + Gap, workArea.Top, maxY));
-        }
-
-        Rect best = new(xs.First(), ys.First(), desired.Width, desired.Height);
-        double bestOverlap = double.MaxValue;
-        double bestDistance = double.MaxValue;
-        foreach (double x in xs)
-        foreach (double y in ys)
-        {
-            var candidate = new Rect(x, y, desired.Width, desired.Height);
-            double overlap = occupied.Sum(r => OverlapAreaWithGap(candidate, r));
-            double distance = Math.Abs(x - desired.Left) + Math.Abs(y - desired.Top);
-            if (overlap < bestOverlap || Math.Abs(overlap - bestOverlap) < 0.01 && distance < bestDistance)
-            {
-                best = candidate;
-                bestOverlap = overlap;
-                bestDistance = distance;
-            }
-        }
-        return best;
+        double last = origin + lastColumn * dx;
+        double gridLeft = Math.Min(origin, last);
+        double gridRight = Math.Max(origin, last) + colWidth;
+        if (gridRight > wa.Right) { double over = gridRight - wa.Right; origin -= over; gridLeft -= over; }
+        if (gridLeft < wa.Left) origin += wa.Left - gridLeft;
+        return origin;
     }
 
-    private static double OverlapAreaWithGap(Rect a, Rect b)
+    /// <summary>한 구역에서 가장 높은 팝업의 높이(구역이 비었으면 0).</summary>
+    private static double BandHeight(IEnumerable<(Window Win, int Col, Band Zone)> placed, Band band)
+        => placed.Where(p => p.Zone == band).Select(p => Height(p.Win)).DefaultIfEmpty(0).Max();
+
+    /// <summary>아직 측정 전(ActualWidth=0)이면 XAML 에 선언한 폭으로 대신한다.</summary>
+    private static double Width(Window w)
     {
-        double left = Math.Max(a.Left, b.Left - Gap);
-        double right = Math.Min(a.Right, b.Right + Gap);
-        double top = Math.Max(a.Top, b.Top - Gap);
-        double bottom = Math.Min(a.Bottom, b.Bottom + Gap);
-        return Math.Max(0, right - left) * Math.Max(0, bottom - top);
+        if (w.ActualWidth > 0) return w.ActualWidth;
+        return double.IsNaN(w.Width) ? w.MinWidth : w.Width;
     }
+
+    /// <summary>SizeToContent 라 Height 가 NaN 일 수 있어, 측정 전에는 MinHeight 로 폴백한다.</summary>
+    private static double Height(Window w)
+    {
+        if (w.ActualHeight > 0) return w.ActualHeight;
+        return double.IsNaN(w.Height) ? w.MinHeight : w.Height;
+    }
+
+    /// <summary>Math.Clamp 와 달리 lo &gt; hi(창이 작업영역보다 큰 경우)에도 던지지 않고 lo 를 준다.</summary>
+    private static double Clamp(double v, double lo, double hi) => Math.Max(lo, Math.Min(v, hi));
 }

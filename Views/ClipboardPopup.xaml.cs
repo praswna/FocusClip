@@ -268,20 +268,13 @@ public partial class ClipboardPopup : Window
         OpenFolderRequested?.Invoke();
     }
 
-    /// <summary>지정한 기준 창(런처 도크) 바로 위에 배치한다(사용자 요청: CM 팝업을 도크 위로). 위쪽 공간이 부족하면 도크 아래로 뒤집는다.</summary>
-    public void ShowAbove(Window anchor)
+    /// <summary>배치 전에 표시하고, 고정 열 그리드에 넣어도 되는지 알린다(위치는 PopupPlacement 가 한꺼번에 계산).
+    /// 핀(📌)으로 사용자가 직접 옮겨 둔 창이면 false — 그 자리를 그대로 지킨다.</summary>
+    public bool ShowForLayout()
     {
         UpdateFolderCount();
         bool wasVisible = IsVisible;
         Show();
-        if (Pinned && wasVisible) return; // 핀+이미 표시 중이면 사용자가 옮긴 위치 유지(재배치 안 함)
-        var wa = ScreenUtil.WorkAreaDip(anchor); // 도크가 놓인 모니터 기준(멀티모니터)
-        double left = Math.Min(anchor.Left, wa.Right - ActualWidth);
-        Left = Math.Max(wa.Left, left);
-        double top = anchor.Top - ActualHeight - 6;
-        // 위쪽 공간이 부족하면(클램프 시 도크와 겹침) 도크 아래로 뒤집어 배치
-        if (top < wa.Top)
-            top = anchor.Top + anchor.ActualHeight + 6;
-        Top = Math.Max(wa.Top, Math.Min(top, wa.Bottom - ActualHeight));
+        return !(Pinned && wasVisible);
     }
 }
