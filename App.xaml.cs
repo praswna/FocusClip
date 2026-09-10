@@ -402,15 +402,7 @@ public partial class App : Application
     {
         _prevForeground = NativeMethods.GetForegroundWindow(); // 붙여넣기 대상 기억
         RefreshActiveStates(); // 비동기 — 표시를 막지 않고, 활성 표시(IsActive)는 도크 표시 직후 한 틱 내 갱신
-        // 저장된 자리가 있으면 항상 그 자리에(팝업들도 도크 기준이라 함께 고정), 없으면(최초 1회) 커서 위치를
-        // 쓰고 그 자리를 저장해 다음부터 고정한다.
-        var (left, top) = _dock!.ShowAt(_configSvc.Config.DockLeft, _configSvc.Config.DockTop);
-        if (_configSvc.Config.DockLeft is null || _configSvc.Config.DockTop is null)
-        {
-            _configSvc.Config.DockLeft = left;
-            _configSvc.Config.DockTop = top;
-            _configSvc.Save();
-        }
+        _dock!.ShowAtCursor();
         _dock.SetCaps(CapsOn()); // 도크 안 [A/a] 버튼에 현재 대소문자 상태 반영
         LayoutPopups();
         _hotkey!.CaptureExtraKeys = true;

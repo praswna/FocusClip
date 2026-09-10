@@ -31,11 +31,6 @@ public class AppConfig
     public int SidebarHideDelayMs { get; set; } = 3000; // 자동 숨김까지의 대기 시간(ms). 마우스가 벗어난 시점부터 잰다.
     public string FileManagerPath { get; set; } = ""; // 폴더 열기에 쓸 파일 관리자 exe(예: Q-Dir). 비우면 기본 탐색기.
     public string FileManagerArgs { get; set; } = "\"%path%\""; // 파일 관리자 실행 인자 템플릿. %path%가 폴더 경로로 치환됨.
-
-    // 도크(와 그 주변에 배치되는 팝업들) 고정 위치(DIP). null이면 아직 정해지지 않아 첫 표시 때 커서 위치로
-    // 정하고 이후 계속 그 자리를 쓴다 — 매번 커서 위치를 따라 옮겨 다니지 않게(사용자 요청).
-    public double? DockLeft { get; set; }
-    public double? DockTop { get; set; }
     // 저장 정책은 핀 기반(미고정=메모리, 고정=파일)으로 고정 — 별도 설정 없음. (옛 MemoryOnly 필드는 제거됨)
 
     // 아이콘 우클릭 동작(설정창에서 변경). 문자열로 직렬화해 enum 순서 변경에 강하게.
