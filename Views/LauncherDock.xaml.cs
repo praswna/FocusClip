@@ -369,11 +369,22 @@ public partial class LauncherDock : Window
         NativeMethods.MakeNoActivateToolWindow(hwnd);
     }
 
-    /// <summary>커서 근처에 표시(포커스 비탈취). 화면 밖으로 나가지 않도록 클램프.</summary>
-    public void ShowAtCursor()
+    /// <summary>고정된 위치(DIP)가 있으면 그 자리에 표시하고, 없으면(최초 1회) 커서 근처에 표시한 뒤
+    /// 그 자리를 <paramref name="fixedLeft"/>/<paramref name="fixedTop"/>로 돌려준다 — 호출한 쪽이 이 값을
+    /// 저장해 두면 다음부터는 항상 같은 자리에 뜬다(사용자 요청: 팝업이 매번 커서를 따라 옮겨 다니지 않게).
+    /// 화면 밖으로 나가지 않도록 항상 클램프한다(해상도·모니터 구성이 바뀐 경우 대비).</summary>
+    public (double Left, double Top) ShowAt(double? fixedLeft, double? fixedTop)
     {
         Show(); // 먼저 표시해야 ActualWidth/Height 와 DPI 가 확정됨
-        if (NativeMethods.GetCursorPos(out var p))
+        if (fixedLeft.HasValue && fixedTop.HasValue)
+        {
+            Left = fixedLeft.Value;
+            Top = fixedTop.Value;
+            var wa = ScreenUtil.WorkAreaDip(this); // 지정 위치가 놓인(가장 가까운) 모니터 기준
+            Left = Math.Max(wa.Left, Math.Min(Left, wa.Right - ActualWidth));
+            Top = Math.Max(wa.Top, Math.Min(Top, wa.Bottom - ActualHeight));
+        }
+        else if (NativeMethods.GetCursorPos(out var p))
         {
             double sx = 1.0, sy = 1.0;
             try { var dpi = VisualTreeHelper.GetDpi(this); sx = dpi.DpiScaleX; sy = dpi.DpiScaleY; }
@@ -387,6 +398,7 @@ public partial class LauncherDock : Window
             Top = Math.Max(wa.Top, top);
         }
         UpdateSeparator(); // 표시 시점에 1회 구분선 위치 확정
+        return (Left, Top);
     }
 }
 
