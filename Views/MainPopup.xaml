@@ -397,30 +397,33 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <!-- 카드 위에 가로로 겹쳐 표시해 버튼 수가 카드 높이를 키우지 않게 한다. -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal"
-                                HorizontalAlignment="Right" VerticalAlignment="Top">
-                        <Button Style="{StaticResource CardEdit}" Click="Edit_Click"
-                                Tag="{Binding}" ToolTip="수정"/>
-                        <Button Click="Promote_Click" Tag="{Binding}" ToolTip="프롬프트로 저장">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource CardPromote}">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsImage}" Value="True">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-                        <Button Style="{StaticResource CardPin}" Click="Pin_Click"
-                                Tag="{Binding}" ToolTip="보관함에 고정(목록 맨 위로)"/>
-                        <Button Style="{StaticResource CardOpen}" Click="Open_Click"
-                                Tag="{Binding}" ToolTip="저장 위치 열기"/>
-                        <Button Style="{StaticResource CardX}" Click="Delete_Click"
-                                Tag="{Binding}" ToolTip="삭제"/>
-                    </StackPanel>
+                    <!-- 카드 위에 가로로 겹쳐 표시해 버튼 수가 카드 높이를 키우지 않게 한다.
+                         본문과 겹쳐 아이콘이 묻히므로 카드와 같은 불투명 색을 깔아 그 자리를 비워 둔 것처럼 보이게 한다. -->
+                    <Border Grid.Row="0" HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Background="{StaticResource Bg2Brush}" CornerRadius="6" Padding="2,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource CardEdit}" Click="Edit_Click"
+                                    Tag="{Binding}" ToolTip="수정"/>
+                            <Button Click="Promote_Click" Tag="{Binding}" ToolTip="프롬프트로 저장">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource CardPromote}">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsImage}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Style="{StaticResource CardPin}" Click="Pin_Click"
+                                    Tag="{Binding}" ToolTip="보관함에 고정(목록 맨 위로)"/>
+                            <Button Style="{StaticResource CardOpen}" Click="Open_Click"
+                                    Tag="{Binding}" ToolTip="저장 위치 열기"/>
+                            <Button Style="{StaticResource CardX}" Click="Delete_Click"
+                                    Tag="{Binding}" ToolTip="삭제"/>
+                        </StackPanel>
+                    </Border>
 
                     <TextBlock Grid.Row="1" Text="{Binding TimeLabel}" Foreground="{StaticResource GrayBrush}"
                                FontSize="10" HorizontalAlignment="Right" Margin="0,4,0,0"/>
@@ -453,15 +456,18 @@
                         <TextBlock Text="{Binding PathDir}" Foreground="{StaticResource GrayBrush}"
                                    FontSize="10" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal"
-                                HorizontalAlignment="Right" VerticalAlignment="Top">
-                        <Button Style="{StaticResource CardPin}" Click="Pin_Click"
-                                Tag="{Binding}" ToolTip="보관함에 고정(목록 맨 위로)"/>
-                        <Button Style="{StaticResource CardPaste}" Click="Paste_Click"
-                                Tag="{Binding}" ToolTip="붙여넣기(직전 창)"/>
-                        <Button Style="{StaticResource CardX}" Click="Delete_Click"
-                                Tag="{Binding}" ToolTip="삭제"/>
-                    </StackPanel>
+                    <!-- 카드와 같은 불투명 색을 깔아 본문과 겹쳐도 아이콘이 묻히지 않게 한다. -->
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Background="{StaticResource Bg2Brush}" CornerRadius="6" Padding="2,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource CardPin}" Click="Pin_Click"
+                                    Tag="{Binding}" ToolTip="보관함에 고정(목록 맨 위로)"/>
+                            <Button Style="{StaticResource CardPaste}" Click="Paste_Click"
+                                    Tag="{Binding}" ToolTip="붙여넣기(직전 창)"/>
+                            <Button Style="{StaticResource CardX}" Click="Delete_Click"
+                                    Tag="{Binding}" ToolTip="삭제"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
         </DataTemplate>
@@ -482,13 +488,16 @@
                         <TextBlock Text="{Binding Preview}" Foreground="{StaticResource GrayBrush}"
                                    FontSize="10" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal"
-                                HorizontalAlignment="Right" VerticalAlignment="Top">
-                        <Button Style="{StaticResource CardEdit}" Click="PromptEdit_Click"
-                                Tag="{Binding}" ToolTip="편집"/>
-                        <Button Style="{StaticResource CardX}" Click="PromptDelete_Click"
-                                Tag="{Binding}" ToolTip="삭제"/>
-                    </StackPanel>
+                    <!-- 카드와 같은 불투명 색을 깔아 본문과 겹쳐도 아이콘이 묻히지 않게 한다. -->
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Background="{StaticResource Bg2Brush}" CornerRadius="6" Padding="2,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource CardEdit}" Click="PromptEdit_Click"
+                                    Tag="{Binding}" ToolTip="편집"/>
+                            <Button Style="{StaticResource CardX}" Click="PromptDelete_Click"
+                                    Tag="{Binding}" ToolTip="삭제"/>
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </Border>
         </DataTemplate>
