@@ -182,12 +182,16 @@ public partial class PromptPopup : Window
         return IntPtr.Zero;
     }
 
-    /// <summary>배치 전에 표시하고, 고정 열 그리드에 넣어도 되는지 알린다(위치는 PopupPlacement 가 한꺼번에 계산).
-    /// 핀(📌)으로 사용자가 직접 옮겨 둔 창이면 false — 그 자리를 그대로 지킨다.</summary>
-    public bool ShowForLayout()
+    /// <summary>
+    /// 클립 팝업이 놓이는(비어서 안 떠 있으면 놓였을) 자리 오른쪽에 배치. alignBottom이면 아래 모서리를 맞춰
+    /// 위로 자라게 한다 — 그 자리가 도크 위일 때 이 팝업이 더 길어도 도크·경로 팝업을 덮지 않는다.
+    /// avoid(경로 팝업·고정 팝업들)가 보이면 그 오른쪽 끝 바깥으로 비켜 배치. 오른쪽 공간이 부족하면 왼쪽으로 뒤집는다.
+    /// </summary>
+    public void ShowRightOf(Rect anchorSlot, Window monitorRef, bool alignBottom = false, params Window?[] avoid)
     {
         bool wasVisible = IsVisible;
         Show();
-        return !(Pinned && wasVisible);
+        if (Pinned && wasVisible) return; // 핀+이미 표시 중이면 사용자가 옮긴 위치 유지(재배치 안 함)
+        PopupPlacement.PlaceRightOf(this, anchorSlot, monitorRef, alignBottom, null, avoid);
     }
 }

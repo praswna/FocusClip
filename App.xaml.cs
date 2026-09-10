@@ -410,9 +410,8 @@ public partial class App : Application
         _outsidePoll?.Start(); // 오토클로즈 외부클릭 감지 시작
     }
 
-    /// <summary>도크 주변 팝업 배치. 0열은 클립(도크 위)·도크·경로(도크 아래), 1열은 각 고정 팝업, 2열은 프롬프트.
-    /// 열 자리는 어떤 팝업이 지금 떠 있는지와 무관하게 고정이라, 항목이 늘고 줄어도 배치가 좌우로 흔들리지 않는다.
-    /// 보여줄 항목이 없는 팝업은 감춘다.
+    /// <summary>도크 주변 팝업 배치. 왼쪽 열은 클립(도크 위)·도크·경로(도크 아래), 그 오른쪽 열이 각 고정 팝업,
+    /// 다시 그 오른쪽이 프롬프트. 보여줄 항목이 없는 팝업은 감춘다.
     /// 고정(📌)한 항목은 기본 팝업에서 빠지고 압축 카드로 고정 팝업에만 나온다(큰 고정 카드가 최근 목록을 밀어내지 않게).</summary>
     private void LayoutPopups()
     {
@@ -426,40 +425,56 @@ public partial class App : Application
         bool paths = _clipboard.Paths.Any(c => !c.Pinned);
         bool pinnedPaths = _clipboard.Paths.Any(c => c.Pinned);
 
+        if (clips) clipPopup.ShowAbove(dock);   // 미고정 클립이 있을 때만 도크 위에
+        else clipPopup.Hide();
+
         if (paths || pinnedPaths)
             _clipboard.RefreshPathExistsAll();  // 표시 직전 존재 여부 백그라운드 재검사(세션 중 삭제 반영)
+        if (paths) pathPopup.ShowBelow(dock, clipPopup.IsVisible ? clipPopup : null); // 도크 아래
+        else pathPopup.Hide();
 
-        // 표시 여부만 먼저 정한다 — 위치는 아래 그리드가 전부 한꺼번에 계산한다.
-        // 열 자리는 팝업이 비어 있어도 잡아 둔다(창 대신 null): 그래야 항목이 생기고 사라져도 나머지 열이 안 밀린다.
-        var cells = new List<PopupPlacement.Cell>();
-        void Place(Window? popup, bool hasItems, int column, PopupPlacement.Band band)
-        {
-            if (popup != null && !hasItems) popup.Hide();
-            bool place = popup != null && hasItems && ShowForLayout(popup);
-            cells.Add(new PopupPlacement.Cell(place ? popup : null, column, band));
-        }
+        // 오른쪽 열은 '클립/경로 팝업이 놓이는 자리' 기준으로 잡는다. 창이 아니라 자리를 기준으로 삼아야
+        // 클립·경로가 비어도 고정 팝업이 도크 옆으로 내려오지 않고 같은 세로 위치를 지키고,
+        // 가로로는 빈 자리(폭 0) 덕에 도크 왼쪽에 정렬됐다가 기본 팝업이 생기면 그만큼 오른쪽으로 밀린다.
+        Rect clipSlot = PopupSlot(clipPopup, dock, above: true);
+        Rect pathSlot = PopupSlot(pathPopup, dock, above: false);
+        // 클립 자리가 도크 위(기본 위치)면 오른쪽 열은 아래 모서리 정렬로 위로 자라게 — 도크·경로 팝업을 덮지 않음
+        bool alignBottom = clipSlot.Top < dock.Top;
 
-        Place(clipPopup, clips, 0, PopupPlacement.Band.Above);
-        Place(pathPopup, paths, 0, PopupPlacement.Band.Below);
-        Place(_clipPinPopup, pinnedClips, 1, PopupPlacement.Band.Above);
-        Place(_pathPinPopup, pinnedPaths, 1, PopupPlacement.Band.Below);
-        // 프롬프트는 비어 있으면 표시 안 함
+        // 고정 클립: 클립 팝업 자리 오른쪽.
+        if (pinnedClips) _clipPinPopup?.ShowRightOf(clipSlot, dock, alignBottom);
+        else _clipPinPopup?.Hide();
+
+        // 고정 경로: 경로 팝업 자리 오른쪽. 같은 열의 고정 클립 팝업과 세로로 겹치면 비켜 쌓는다.
+        if (pinnedPaths) _pathPinPopup?.ShowRightOf(pathSlot, dock, false, _clipPinPopup);
+        else _pathPinPopup?.Hide();
+
+        // 프롬프트: 경로·고정 팝업들의 오른쪽 끝 바깥. 비어 있으면 표시 안 함
         // — 첫 프롬프트는 클립 카드의 🔖(프롬프트로 저장) 또는 트레이 「프롬프트 추가」로 만든다.
-        Place(_promptPopup, _prompts.Prompts.Count > 0, 2, PopupPlacement.Band.Above);
+        if (_prompts.Prompts.Count > 0)
+            _promptPopup?.ShowRightOf(clipSlot, dock, alignBottom, pathPopup, _clipPinPopup, _pathPinPopup);
+        else _promptPopup?.Hide();
 
-        PopupPlacement.Layout(dock, cells);
+        // 각 창의 기본 위치를 정한 뒤 화면 끝에서 생긴 충돌을 순차적으로 해소한다.
+        // 사용자가 직접 핀으로 옮긴 팝업은 고정 장애물로 취급해 위치를 보존한다.
+        PopupPlacement.ResolveOverlaps(dock, Popups().Where(IsPopupPinned),
+            clipPopup, pathPopup, _clipPinPopup, _pathPinPopup, _promptPopup);
     }
 
-    /// <summary>팝업을 배치 전에 표시하고, 그리드에 넣을지 알린다.
-    /// 핀(📌)으로 사용자가 직접 옮겨 둔 창은 false — 그 자리를 그대로 지킨다.</summary>
-    private static bool ShowForLayout(Window w) => w switch
+    /// <summary>클립·경로 팝업이 차지하는 자리. 오른쪽 열(고정·프롬프트 팝업)이 이 자리를 기준으로 놓인다.
+    /// 항목이 없어 떠 있지 않으면 폭 0의 빈 자리를 돌려준다 — 오른쪽 열이 도크 왼쪽 끝에 그대로 정렬되고,
+    /// 나중에 클립·경로가 생겨 기본 팝업이 뜨면 그 폭만큼 오른쪽으로 밀려난다.
+    /// 세로 위치는 팝업 유무와 무관하게 고정 — 위 슬롯은 도크 윗변에서 6px 위(아래 모서리 기준),
+    /// 아래 슬롯은 도크 아랫변에서 6px 아래(위 모서리 기준).</summary>
+    private static Rect PopupSlot(Window popup, Window dock, bool above)
     {
-        ClipboardPopup cp => cp.ShowForLayout(),
-        PathPopup pp => pp.ShowForLayout(),
-        PromptPopup pr => pr.ShowForLayout(),
-        PinnedPopup pn => pn.ShowForLayout(),
-        _ => false,
-    };
+        if (popup.IsVisible) return PopupPlacement.RectOf(popup);
+        double top = above
+            ? dock.Top - PopupPlacement.Gap                      // 위 슬롯: 아래 모서리가 도크 윗변에서 6px
+            : dock.Top + dock.ActualHeight + PopupPlacement.Gap; // 아래 슬롯: 위 모서리가 도크 아랫변에서 6px
+        // 오른쪽 끝을 '도크 왼쪽 - 간격'에 두면 뒤이은 (오른쪽 끝 + 간격) 계산이 정확히 도크 왼쪽에 맞는다.
+        return new Rect(dock.Left - PopupPlacement.Gap, top, 0, 0);
+    }
 
     /// <summary>오버레이 숨김. force=true(CapsLock·Esc)면 팝업 핀도 무시하고 닫는다(C1).</summary>
     private void HideOverlay(bool force = false)
