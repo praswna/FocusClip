@@ -208,11 +208,12 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
 
-    // ── 붙여넣기(Ctrl+V) 합성 ──
+    // ── 붙여넣기(Ctrl+V)·탭 순환(Ctrl+Tab) 합성 ──
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const byte VK_CONTROL = 0x11;
     public const byte VK_HANGUL = 0x15;
     public const byte VK_V = 0x56;
+    public const byte VK_TAB = 0x09;
 
     [DllImport("user32.dll")]
     public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
