@@ -20,6 +20,14 @@ public sealed class WindowManager
         Run(app);
     }
 
+    /// <summary>이 앱의 창이 지금 포그라운드인지. 같은 숫자키를 다시 눌렀을 때
+    /// '재활성화'와 '탭 순환'을 구분하는 데 쓴다(이미 앞에 떠 있으면 재활성화는 의미가 없다).</summary>
+    public bool IsForeground(AppEntry app)
+    {
+        IntPtr h = FindMainWindow(app);
+        return h != IntPtr.Zero && h == NativeMethods.GetForegroundWindow();
+    }
+
     /// <summary>열려 있는 탐색기 폴더 창 중 Z-order 맨 아래(가장 오래 안 본) 창을 앞으로 올린다.
     /// 앞으로 올린 창이 맨 위로 가므로, 연타하면 열린 창 전체를 한 바퀴 순환한다
     /// — 별도로 순서를 기억할 필요가 없다. 열린 폴더 창이 없으면 false.</summary>

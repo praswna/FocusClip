@@ -429,11 +429,17 @@ public partial class App : Application
             WindowManager.OpenDefaultExplorer();
     }
 
+    /// <summary>숫자키 N: 고정 앱을 활성화하되, 아이콘 클릭과 달리 도크를 닫지 않는다 — 그래야 같은 번호를
+    /// 곧바로 연타했을 때도 계속 눌리고 있는 것으로 잡힌다. 그 앱이 이미 포그라운드면(=활성화해 둔 채
+    /// 같은 번호를 또 누른 것) 재활성화는 의미가 없으므로 대신 Ctrl+Tab 을 보내 다음 탭으로 순환한다
+    /// (사용자 요청: 크롬을 그 번호에 고정해 두고 CapsLock+N → 번호 연타로 탭 넘기기).</summary>
     private void ActivatePinned(int n)
     {
         int idx = n - 1;
-        if (idx >= 0 && idx < _configSvc.Config.PinnedCount && idx < _apps.Count)
-            OnAppActivated(_apps[idx]);
+        if (idx < 0 || idx >= _configSvc.Config.PinnedCount || idx >= _apps.Count) return;
+        var app = _apps[idx];
+        if (_windows.IsForeground(app)) PasteService.SendCtrlTab();
+        else _windows.ActivateOrRun(app);
     }
 
     // ── 클립 선택 → 클립보드 설정 + 직전 창에 붙여넣기 ──
