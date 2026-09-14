@@ -48,7 +48,12 @@ public sealed class IconService
     /// <summary>경로가 유효하면 그대로, 낡았으면 실행 중 프로세스에서 복구하고 app.ExePath 갱신.</summary>
     public static string? ResolvePath(AppEntry app)
     {
-        if (!string.IsNullOrEmpty(app.ExePath) && File.Exists(app.ExePath)) return app.ExePath;
+        // 스토어(MSIX) 앱 경로는 WindowsApps 폴더 권한 때문에 File.Exists 가 false 로 나온다.
+        // 그렇다고 "낡은 경로"로 보고 버리면 실행 자체가 불가능해지므로 그대로 돌려준다
+        // (실행은 AppLauncher 가 AUMID 로 처리한다).
+        if (!string.IsNullOrEmpty(app.ExePath)
+            && (File.Exists(app.ExePath) || AppLauncher.IsPackagedPath(app.ExePath)))
+            return app.ExePath;
 
         string nameNoExe = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
             ? app.ProcessName[..^4] : app.ProcessName;

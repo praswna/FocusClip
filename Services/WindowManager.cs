@@ -92,6 +92,28 @@ public sealed class WindowManager
         return true;
     }
 
+    /// <summary>보이는 · 소유자 없는 · 제목 있는 최상위 창을 가진 프로세스 ID 집합.
+    /// Process.MainWindowHandle 은 Chromium/Electron 계열(ChatGPT 데스크톱 등)에서 0 을 돌려주는 일이
+    /// 있어, 설정창의 "실행 중 앱" 목록이 그런 앱을 통째로 놓친다. 창 열거로 직접 판정한다.</summary>
+    public static HashSet<uint> WindowOwnerPids()
+    {
+        var pids = new HashSet<uint>();
+        try
+        {
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (!NativeMethods.IsWindowVisible(hwnd)) return true;
+                if (NativeMethods.GetWindow(hwnd, NativeMethods.GW_OWNER) != IntPtr.Zero) return true;
+                if (NativeMethods.GetWindowTextLength(hwnd) <= 0) return true;
+                NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+                pids.Add(pid);
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { }
+        return pids;
+    }
+
     private static IntPtr FindMainWindow(AppEntry app)
     {
         string nameNoExe = app.ProcessName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
@@ -135,11 +157,6 @@ public sealed class WindowManager
         return found != IntPtr.Zero ? found : fallback;
     }
 
-    private static void Run(AppEntry app)
-    {
-        string? path = IconService.ResolvePath(app) ?? (string.IsNullOrEmpty(app.ExePath) ? null : app.ExePath);
-        if (string.IsNullOrEmpty(path)) return;
-        try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-        catch { }
-    }
+    // 일반 exe 는 경로로, 스토어(MSIX) 앱은 AUMID 로 띄운다 — AppLauncher 참고.
+    private static void Run(AppEntry app) => AppLauncher.Launch(app);
 }

@@ -10,6 +10,9 @@ public class AppEntry : INotifyPropertyChanged
     public string Name { get; set; } = "";
     public string ProcessName { get; set; } = "";   // 예: "chrome.exe" (창 매칭용, FM의 ahk_exe 값)
     public string ExePath { get; set; } = "";        // 실행 파일 경로(낡으면 실행 중 프로세스에서 self-heal)
+    // 스토어(MSIX) 앱의 AUMID. WindowsApps 아래 exe 는 직접 실행이 막혀 있어 이 ID로 띄운다.
+    // 처음 실행할 때 셸 AppsFolder 에서 찾아 채워지고(캐시), 이후엔 바로 재사용한다.
+    public string AumId { get; set; } = "";
 
     // ── UI 바인딩용(설정 직렬화 제외) ──
     private ImageSource? _icon;

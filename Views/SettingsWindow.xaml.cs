@@ -278,6 +278,7 @@ public partial class SettingsWindow : Window
         var list = new List<AppEntry>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        var winPids = WindowManager.WindowOwnerPids(); // 창을 가진 프로세스(MainWindowHandle 미노출 앱 포함)
         var processes = Process.GetProcesses();
         try
         {
@@ -285,14 +286,17 @@ public partial class SettingsWindow : Window
             {
                 try
                 {
-                    if (p.MainWindowHandle == IntPtr.Zero || string.IsNullOrEmpty(p.MainWindowTitle)) continue;
+                    if (!winPids.Contains((uint)p.Id)) continue;
                     string proc = p.ProcessName + ".exe";
                     if (exclude.Contains(proc) || seen.Contains(proc)) continue;
-                    string? path = p.MainModule?.FileName;
-                    if (string.IsNullOrEmpty(path)) continue;
-                    if (path.StartsWith(winDir, StringComparison.OrdinalIgnoreCase)) continue;
+                    // 스토어(MSIX) 앱은 MainModule 접근이 막혀 경로가 안 나올 수 있다. 경로가 없어도
+                    // 목록에서 빼지 않는다 — 실행은 AppLauncher 가 이름으로 AppsFolder 를 찾아 처리한다.
+                    string? path = null;
+                    try { path = p.MainModule?.FileName; } catch { }
+                    if (!string.IsNullOrEmpty(path)
+                        && path.StartsWith(winDir, StringComparison.OrdinalIgnoreCase)) continue;
                     seen.Add(proc);
-                    list.Add(new AppEntry { Name = p.ProcessName, ProcessName = proc, ExePath = path });
+                    list.Add(new AppEntry { Name = p.ProcessName, ProcessName = proc, ExePath = path ?? "" });
                 }
                 catch { /* 권한/비트수 차이 → 건너뜀 */ }
             }
