@@ -304,10 +304,21 @@ public partial class App : Application
     // ── 오버레이(도크 + 클립 팝업) 토글 ──
     private void ToggleOverlay()
     {
-        // 도크 표시 여부로 토글. force:false 라서 핀된 팝업은 CapsLock 으로 닫히지 않고 유지된다(사용자 요청).
         // 도크가 숨겨진 상태에서 보이는 팝업은 '핀된 것'뿐이므로 도크 기준 판정이 안전하다.
-        if (_dock?.IsVisible ?? false) HideOverlay(force: false);
+        // 이미 떠 있으면 닫지 않고 다음 탭으로 넘어간다 — CapsLock 연타로 클립 → 경로 → 프롬프트 순환.
+        // 닫기는 Esc · 바깥 클릭 · 다른 키 입력(오토클로즈)이 맡는다.
+        if (_dock?.IsVisible ?? false) CycleTab();
         else ShowOverlay();
+    }
+
+    /// <summary>팝업의 다음 탭으로. 팝업이 안 떠 있으면(핀 해제 후 등) 먼저 제자리에 띄운다.</summary>
+    private void CycleTab()
+    {
+        if (_popup == null) return;
+        if (!_popup.IsVisible) LayoutPopups();
+        _popup.NextTab();
+        // CapsLock 은 통과(pass-through)라 누를 때마다 대소문자가 뒤집힌다 → 도크 표시를 맞춰 준다.
+        _dock?.SetCaps(CapsOn());
     }
 
     private void ShowOverlay()

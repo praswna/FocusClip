@@ -130,6 +130,19 @@ public partial class MainPopup : Window
     private static double Clamp(double v, double lo, double hi) => Math.Max(lo, Math.Min(v, hi));
 
     // ── 탭 전환 ──
+
+    /// <summary>다음 탭으로 넘어간다(클립 → 경로 → 프롬프트 → 클립 … 끝없이 순환).
+    /// CapsLock 연타로 호출된다 — 접혀 있으면 먼저 펼쳐야 바뀐 탭이 보인다.</summary>
+    public void NextTab()
+    {
+        if (TabClip == null || TabPath == null || TabPrompt == null) return;
+        // 접혀 있으면 펼친다. 높이가 바뀌므로 앱에 재배치를 알려야 도크 위 자리가 어긋나지 않는다.
+        if (TabArea.Visibility != Visibility.Visible) { Expand(); CollapseChanged?.Invoke(); }
+        if (TabClip.IsChecked == true) TabPath.IsChecked = true;
+        else if (TabPath.IsChecked == true) TabPrompt.IsChecked = true;
+        else TabClip.IsChecked = true;
+    }
+
     private void Tab_Checked(object sender, RoutedEventArgs e)
     {
         // XAML 파싱 중 IsChecked="True" 로 먼저 불릴 수 있다(그 시점엔 탭 패널이 아직 null).
