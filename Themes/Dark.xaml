@@ -20,6 +20,24 @@
     <SolidColorBrush x:Key="GrayBrush" Color="{StaticResource GrayColor}"/>
     <SolidColorBrush x:Key="NeonBrush" Color="{StaticResource NeonColor}"/>
 
+    <!-- ── 기능별 강조색 ──────────────────────────────────────────────
+         클립=청록(기존 Accent 그대로), 경로=파랑, 프롬프트=보라.
+         채도·명도를 맞춘 인접 계열이라 다크 배경에서 서로 구분되면서도 톤이 깨지지 않는다.
+         "지금 어느 기능을 보고 있는지"를 탭과 카드가 같은 색으로 말해 준다. -->
+    <Color x:Key="ClipColor">#FF0D9488</Color>
+    <Color x:Key="PathColor">#FF3B82F6</Color>
+    <Color x:Key="PromptColor">#FF8B5CF6</Color>
+
+    <SolidColorBrush x:Key="ClipBrush" Color="{StaticResource ClipColor}"/>
+    <SolidColorBrush x:Key="PathBrush" Color="{StaticResource PathColor}"/>
+    <SolidColorBrush x:Key="PromptBrush" Color="{StaticResource PromptColor}"/>
+
+    <!-- 기능별 카드 틴트: 배경(#2B2B2B)에 각 강조색을 옅게 섞은 값.
+         고정(★) 압축 카드처럼 면 전체를 칠하는 자리에 쓴다(청록 값은 기존 고정 카드 색 유지). -->
+    <SolidColorBrush x:Key="ClipTintBrush" Color="#FF143A37"/>
+    <SolidColorBrush x:Key="PathTintBrush" Color="#FF16263F"/>
+    <SolidColorBrush x:Key="PromptTintBrush" Color="#FF231C3B"/>
+
     <!-- 다크 테마 얇은 스크롤바(팝업에서 BasedOn 으로 적용). 화살표 버튼 없이 둥근 반투명 썸. -->
     <Style x:Key="DarkScrollBar" TargetType="ScrollBar">
         <Setter Property="Background" Value="Transparent"/>

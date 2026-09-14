@@ -17,6 +17,8 @@
         <Style x:Key="SegBtn" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{StaticResource GrayBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <!-- 선택됐을 때 칠할 색. 탭/필터마다 Tag 로 기능색을 지정한다(기본=클립색). -->
+            <Setter Property="Tag" Value="{StaticResource ClipBrush}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
@@ -30,7 +32,8 @@
                                 <Setter TargetName="b" Property="Background" Value="{StaticResource Bg3Brush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="b" Property="Background"
+                                        Value="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Tag}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -184,11 +187,11 @@
             </Setter>
         </Style>
 
-        <!-- 헤더 추가(+) 버튼: 프롬프트 탭 -->
+        <!-- 헤더 추가(+) 버튼: 프롬프트 탭 전용이라 프롬프트색(보라)을 쓴다 -->
         <Style x:Key="AddBtn" TargetType="Button">
             <Setter Property="Width" Value="24"/>
             <Setter Property="Height" Value="24"/>
-            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource PromptBrush}"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -199,7 +202,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource PromptBrush}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -289,8 +292,8 @@
 
         <!-- ── 고정(★) 항목 압축 카드: 클립·경로 공용. 각 탭 목록 맨 위에 붙는다 ── -->
         <DataTemplate x:Key="PinnedCardTemplate">
-            <Border CornerRadius="5" Margin="0,1" Padding="5,3" Cursor="Hand"
-                    Background="#FF143A37"
+            <Border CornerRadius="5" Margin="0,1" Padding="3,3,5,3" Cursor="Hand"
+                    BorderThickness="3,0,0,0"
                     MouseLeftButtonUp="PinCard_Click"
                     PreviewMouseLeftButtonDown="Card_Down"
                     PreviewMouseMove="Card_Move"
@@ -298,7 +301,14 @@
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="ToolTip" Value="{Binding Snippet}"/>
+                        <!-- 클립 기본색. 같은 템플릿을 경로 탭도 쓰므로 아래 IsPath 트리거가 파랑으로 바꾼다. -->
+                        <Setter Property="Background" Value="{StaticResource ClipTintBrush}"/>
+                        <Setter Property="BorderBrush" Value="{StaticResource ClipBrush}"/>
                         <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPath}" Value="True">
+                                <Setter Property="Background" Value="{StaticResource PathTintBrush}"/>
+                                <Setter Property="BorderBrush" Value="{StaticResource PathBrush}"/>
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding IsImage}" Value="True">
                                 <Setter Property="ToolTip" Value="{x:Null}"/>
                             </DataTrigger>
@@ -356,8 +366,9 @@
 
         <!-- ── 클립 카드 ── -->
         <DataTemplate x:Key="ClipCardTemplate">
-            <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
+            <Border CornerRadius="6" Margin="0,2" Padding="4,6,6,6" Cursor="Hand"
                     Background="{StaticResource Bg2Brush}"
+                    BorderBrush="{StaticResource ClipBrush}" BorderThickness="3,0,0,0"
                     MouseLeftButtonUp="ClipCard_Click"
                     PreviewMouseLeftButtonDown="Card_Down"
                     PreviewMouseMove="Card_Move"
@@ -455,8 +466,9 @@
 
         <!-- ── 경로 카드 ── -->
         <DataTemplate x:Key="PathCardTemplate">
-            <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
+            <Border CornerRadius="6" Margin="0,2" Padding="4,6,6,6" Cursor="Hand"
                     Background="{StaticResource Bg2Brush}"
+                    BorderBrush="{StaticResource PathBrush}" BorderThickness="3,0,0,0"
                     PreviewMouseLeftButtonDown="Card_Down"
                     PreviewMouseMove="Card_Move"
                     MouseLeftButtonUp="PathCard_Click"
@@ -496,8 +508,9 @@
 
         <!-- ── 프롬프트 카드 ── -->
         <DataTemplate x:Key="PromptCardTemplate">
-            <Border CornerRadius="6" Margin="0,2" Padding="6" Cursor="Hand"
+            <Border CornerRadius="6" Margin="0,2" Padding="4,6,6,6" Cursor="Hand"
                     Background="{StaticResource Bg2Brush}"
+                    BorderBrush="{StaticResource PromptBrush}" BorderThickness="3,0,0,0"
                     PreviewMouseLeftButtonDown="Card_Down"
                     PreviewMouseMove="Card_Move"
                     MouseLeftButtonUp="PromptCard_Click"
@@ -557,8 +570,10 @@
                     <RadioButton x:Name="TabClip" Style="{StaticResource TabBtn}" GroupName="MainTabs"
                                  Content="클립" IsChecked="True" Checked="Tab_Checked"/>
                     <RadioButton x:Name="TabPath" Style="{StaticResource TabBtn}" GroupName="MainTabs"
+                                 Tag="{StaticResource PathBrush}"
                                  Content="경로" Checked="Tab_Checked"/>
                     <RadioButton x:Name="TabPrompt" Style="{StaticResource TabBtn}" GroupName="MainTabs"
+                                 Tag="{StaticResource PromptBrush}"
                                  Content="프롬프트" Checked="Tab_Checked"/>
                 </StackPanel>
                 <TextBlock x:Name="FolderCount" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -628,10 +643,13 @@
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
                         <RadioButton x:Name="PathFilterAll" Style="{StaticResource SegBtn}" GroupName="PathFilter"
+                                     Tag="{StaticResource PathBrush}"
                                      Content="전체" IsChecked="True" Checked="PathFilter_All"/>
                         <RadioButton x:Name="PathFilterLocal" Style="{StaticResource SegBtn}" GroupName="PathFilter"
+                                     Tag="{StaticResource PathBrush}"
                                      Content="로컬" Checked="PathFilter_Local"/>
                         <RadioButton x:Name="PathFilterUrl" Style="{StaticResource SegBtn}" GroupName="PathFilter"
+                                     Tag="{StaticResource PathBrush}"
                                      Content="URL" Checked="PathFilter_Url"/>
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" x:Name="PathScroller" VerticalScrollBarVisibility="Auto"
